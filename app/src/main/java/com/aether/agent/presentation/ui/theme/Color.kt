@@ -20,25 +20,25 @@ data class AetherPalette(
 )
 
 val LightPalette = AetherPalette(
-    surface = Color(0xFFFFFDF9),
-    userBubble = Color(0xFFECE6DA),
-    border = Color(0xFFE2DACB),
-    muted = Color(0xFF8A8178),
+    surface = Color(0xFFFFFFFF),
+    userBubble = Color(0xFFF0EDE6),
+    border = Color(0xFFE4E4E7),
+    muted = Color(0xFF71717A),
     codeBg = Color(0xFF1E1E22),
     codeHeader = Color(0xFF2A2A30),
     codeText = Color(0xFFE4E2EA),
-    cardBg = Color(0xFFFFFDF9),
+    cardBg = Color(0xFFFFFFFF),
 )
 
 val DarkPalette = AetherPalette(
-    surface = Color(0xFF26262C),
-    userBubble = Color(0xFF2E2E35),
-    border = Color(0xFF3A3A42),
-    muted = Color(0xFFA9A7B0),
-    codeBg = Color(0xFF16161A),
-    codeHeader = Color(0xFF24242B),
-    codeText = Color(0xFFE4E2EA),
-    cardBg = Color(0xFF26262C),
+    surface = Color(0xFF27272A),
+    userBubble = Color(0xFF303034),
+    border = Color(0xFF3F3F46),
+    muted = Color(0xFFA1A1AA),
+    codeBg = Color(0xFF101012),
+    codeHeader = Color(0xFF202024),
+    codeText = Color(0xFFE4E4E7),
+    cardBg = Color(0xFF27272A),
 )
 
 val LocalAetherPalette = staticCompositionLocalOf { LightPalette }

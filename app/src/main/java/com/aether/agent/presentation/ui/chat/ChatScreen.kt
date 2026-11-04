@@ -1,5 +1,6 @@
 package com.aether.agent.presentation.ui.chat
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,19 +23,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,17 +49,40 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.aether.agent.presentation.components.AIcon
+import com.aether.agent.presentation.components.AetherIcon
 import com.aether.agent.presentation.components.AgentActionCard
-import com.aether.agent.presentation.components.ApprovalDialog
 import com.aether.agent.presentation.components.AppDrawer
+import com.aether.agent.presentation.components.ApprovalDialog
 import com.aether.agent.presentation.components.ChatBubble
+import com.aether.agent.presentation.components.IconAction
 import com.aether.agent.presentation.components.ThinkingIndicator
 import com.aether.agent.presentation.ui.theme.LocalAetherPalette
 import com.aether.agent.presentation.ui.theme.Terracotta
 import com.aether.agent.presentation.viewmodel.CardState
 import com.aether.agent.presentation.viewmodel.ChatViewModel
+import java.time.LocalTime
 import kotlinx.coroutines.launch
+
+private data class Suggestion(val label: String, val prompt: String)
+
+private val suggestions = listOf(
+    Suggestion("Baca struktur repo", "Baca struktur repo lalu jelaskan arsitekturnya secara singkat."),
+    Suggestion("10 commit terakhir", "Tampilkan 10 commit terakhir dan ringkas perubahannya."),
+    Suggestion("Issue yang terbuka", "Lihat issue yang masih terbuka dan kelompokkan berdasarkan prioritas."),
+)
+
+private fun greeting(): String {
+    val hour = LocalTime.now().hour
+    return when {
+        hour < 11 -> "Selamat pagi"
+        hour < 15 -> "Selamat siang"
+        hour < 18 -> "Selamat sore"
+        else -> "Selamat malam"
+    }
+}
 
 @Composable
 fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel()) {
@@ -80,6 +102,13 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
 
     val status = cards.lastOrNull { it.state == CardState.RUNNING }?.title
     val title = sessions.firstOrNull { it.id == activeId }?.title ?: "AetherAgent"
+    val subtitle = if (settings.githubOwner.isNotBlank() && settings.githubRepo.isNotBlank()) {
+        "${settings.githubOwner}/${settings.githubRepo} · ${settings.githubBranch}"
+    } else {
+        "Repo belum diatur"
+    }
+
+    BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
 
     LaunchedEffect(messages.size, cards.size, running) {
         val last = listState.layoutInfo.totalItemsCount - 1
@@ -115,6 +144,7 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             TopBar(
                 title = title,
+                subtitle = subtitle,
                 onMenu = { scope.launch { drawerState.open() } },
                 onClear = viewModel::clear,
             )
@@ -126,7 +156,7 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 if (messages.isEmpty() && cards.isEmpty() && !running) {
-                    item { EmptyState() }
+                    item { EmptyState(onPick = { input = it }) }
                 }
                 items(messages, key = { it.id }) { ChatBubble(it) }
                 items(cards, key = { it.id }) { AgentActionCard(it) }
@@ -162,7 +192,7 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
 }
 
 @Composable
-private fun TopBar(title: String, onMenu: () -> Unit, onClear: () -> Unit) {
+private fun TopBar(title: String, subtitle: String, onMenu: () -> Unit, onClear: () -> Unit) {
     val palette = LocalAetherPalette.current
     var menuOpen by remember { mutableStateOf(false) }
     Row(
@@ -171,20 +201,24 @@ private fun TopBar(title: String, onMenu: () -> Unit, onClear: () -> Unit) {
             .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onMenu) {
-            Text("☰", style = MaterialTheme.typography.titleLarge, color = palette.muted)
+        IconAction(AetherIcon.Menu, "Buka menu", onMenu)
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = palette.muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(start = 4.dp),
-        )
         Box {
-            IconButton(onClick = { menuOpen = true }) {
-                Text("⋯", style = MaterialTheme.typography.titleLarge, color = palette.muted)
-            }
+            IconAction(AetherIcon.More, "Opsi chat", { menuOpen = true })
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
                     text = { Text("Kosongkan chat ini") },
@@ -199,36 +233,48 @@ private fun TopBar(title: String, onMenu: () -> Unit, onClear: () -> Unit) {
 }
 
 @Composable
-private fun EmptyState() {
+private fun EmptyState(onPick: (String) -> Unit) {
     val palette = LocalAetherPalette.current
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(top = 96.dp),
+            .padding(top = 56.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Terracotta),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("A", color = Color.White, style = MaterialTheme.typography.titleLarge)
-        }
-        Spacer(Modifier.height(20.dp))
+        AIcon(AetherIcon.Sparkle, tint = Terracotta, size = 44.dp)
+        Spacer(Modifier.height(16.dp))
         Text(
-            "Apa yang mau dikerjakan hari ini?",
-            style = MaterialTheme.typography.headlineSmall,
+            greeting(),
+            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 32.sp, lineHeight = 38.sp),
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
-            "Tanyakan struktur repo, minta perubahan kode, atau buat pull request.",
+            "Mau mengerjakan apa?",
             style = MaterialTheme.typography.bodyMedium,
             color = palette.muted,
             textAlign = TextAlign.Center,
         )
+        Spacer(Modifier.height(28.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            suggestions.forEach { s ->
+                Surface(
+                    color = palette.cardBg,
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(0.5.dp, palette.border),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        s.label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(s.prompt) }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -248,16 +294,16 @@ private fun InputBar(
             .imePadding()
             .navigationBarsPadding()
             .padding(horizontal = 12.dp, vertical = 10.dp),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         color = palette.surface,
         border = BorderStroke(0.5.dp, palette.border),
         shadowElevation = 2.dp,
     ) {
-        Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 8.dp)) {
+        Column(Modifier.padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 8.dp)) {
             TextField(
                 value = text,
                 onValueChange = onTextChange,
-                placeholder = { Text("Tulis instruksi…", color = palette.muted) },
+                placeholder = { Text("Tulis instruksi...", color = palette.muted) },
                 maxLines = 6,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
@@ -274,13 +320,11 @@ private fun InputBar(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onAttach) {
-                    Text("+", style = MaterialTheme.typography.titleLarge, color = palette.muted)
-                }
+                IconAction(AetherIcon.Plus, "Lampirkan", onAttach, tint = palette.muted)
                 if (running) {
-                    CircleButton(label = "■", enabled = true, color = palette.muted, onClick = onStop)
+                    CircleButton(icon = AetherIcon.Stop, description = "Hentikan", enabled = true, onClick = onStop)
                 } else {
-                    CircleButton(label = "↑", enabled = text.isNotBlank(), color = Terracotta, onClick = onSend)
+                    CircleButton(icon = AetherIcon.ArrowUp, description = "Kirim", enabled = text.isNotBlank(), onClick = onSend)
                 }
             }
         }
@@ -288,15 +332,15 @@ private fun InputBar(
 }
 
 @Composable
-private fun CircleButton(label: String, enabled: Boolean, color: Color, onClick: () -> Unit) {
+private fun CircleButton(icon: AetherIcon, description: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
-            .size(36.dp)
+            .size(38.dp)
             .clip(CircleShape)
-            .background(if (enabled) color else color.copy(alpha = 0.35f))
+            .background(if (enabled) Terracotta else Terracotta.copy(alpha = 0.35f))
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = Color.White, style = MaterialTheme.typography.titleMedium)
+        AIcon(icon, tint = Color.White, size = 20.dp, strokeWidth = 2.2.dp)
     }
 }

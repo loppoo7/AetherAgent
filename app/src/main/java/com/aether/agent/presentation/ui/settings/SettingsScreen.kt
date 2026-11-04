@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -54,6 +56,9 @@ import com.aether.agent.domain.model.AnswerStyle
 import com.aether.agent.domain.model.Provider
 import com.aether.agent.domain.model.ThemeMode
 import com.aether.agent.domain.usecase.GithubLoginState
+import com.aether.agent.presentation.components.AetherIcon
+import com.aether.agent.presentation.components.IconAction
+import com.aether.agent.presentation.components.StatusDot
 import com.aether.agent.presentation.ui.theme.LocalAetherPalette
 import com.aether.agent.presentation.ui.theme.Terracotta
 import com.aether.agent.presentation.viewmodel.SettingsViewModel
@@ -70,12 +75,14 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
         Modifier
             .fillMaxSize()
             .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("←", style = MaterialTheme.typography.titleLarge) }
+            IconAction(AetherIcon.Back, "Kembali", onBack)
             Text("Pengaturan", style = MaterialTheme.typography.headlineSmall)
         }
 
@@ -272,7 +279,11 @@ private fun GithubConnection(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("@$connectedLogin", style = MaterialTheme.typography.titleSmall)
-                Text("● Terhubung", style = MaterialTheme.typography.bodySmall, color = Color(0xFF22C55E))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    StatusDot(Color(0xFF22C55E))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Terhubung", style = MaterialTheme.typography.bodySmall, color = palette.muted)
+                }
             }
             TextButton(onClick = onDisconnect) { Text("Putuskan", color = MaterialTheme.colorScheme.error) }
         }

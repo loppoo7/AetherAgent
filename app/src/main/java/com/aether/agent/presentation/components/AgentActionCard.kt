@@ -1,9 +1,8 @@
 package com.aether.agent.presentation.components
 
-import com.aether.agent.presentation.ui.theme.AetherMono
-
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,15 +22,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.unit.dp
+import com.aether.agent.presentation.ui.theme.AetherMono
 import com.aether.agent.presentation.ui.theme.LocalAetherPalette
 import com.aether.agent.presentation.ui.theme.Terracotta
 import com.aether.agent.presentation.viewmodel.AgentCard
 import com.aether.agent.presentation.viewmodel.CardState
 
-/** Kartu aksi GitHub: transparan dengan garis tipis, bisa dibuka untuk melihat detail. */
+/** Kartu aksi GitHub: garis tipis, ketuk untuk membuka detail output. */
 @Composable
 fun AgentActionCard(card: AgentCard) {
     val palette = LocalAetherPalette.current
@@ -45,7 +44,12 @@ fun AgentActionCard(card: AgentCard) {
         border = BorderStroke(0.5.dp, palette.border),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Column(
+            Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .clickable(enabled = hasDetail) { expanded = !expanded }
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -58,9 +62,12 @@ fun AgentActionCard(card: AgentCard) {
                     modifier = Modifier.weight(1f),
                 )
                 if (hasDetail) {
-                    TextButton(onClick = { expanded = !expanded }) {
-                        Text(if (expanded) "Tutup" else "Detail", color = palette.muted)
-                    }
+                    AIcon(
+                        icon = AetherIcon.ChevronDown,
+                        tint = palette.muted,
+                        size = 18.dp,
+                        modifier = Modifier.rotate(if (expanded) 180f else 0f),
+                    )
                 }
             }
             AnimatedVisibility(visible = expanded && hasDetail) {
@@ -78,6 +85,7 @@ fun AgentActionCard(card: AgentCard) {
 
 @Composable
 private fun StateIcon(state: CardState) {
+    val palette = LocalAetherPalette.current
     Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
         when (state) {
             CardState.RUNNING -> CircularProgressIndicator(
@@ -85,9 +93,9 @@ private fun StateIcon(state: CardState) {
                 color = Terracotta,
                 strokeWidth = 2.dp,
             )
-            CardState.OK -> Text("✓", color = Terracotta, fontWeight = FontWeight.Bold)
-            CardState.FAILED -> Text("✕", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
-            CardState.REJECTED -> Text("–", color = LocalAetherPalette.current.muted, fontWeight = FontWeight.Bold)
+            CardState.OK -> AIcon(AetherIcon.Check, tint = Terracotta, size = 18.dp, strokeWidth = 2.2.dp)
+            CardState.FAILED -> AIcon(AetherIcon.Close, tint = MaterialTheme.colorScheme.error, size = 16.dp, strokeWidth = 2.2.dp)
+            CardState.REJECTED -> AIcon(AetherIcon.Minus, tint = palette.muted, size = 16.dp, strokeWidth = 2.2.dp)
         }
     }
 }

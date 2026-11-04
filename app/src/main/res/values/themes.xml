@@ -1,9 +1,9 @@
 <resources>
     <style name="Theme.AetherAgent" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:windowBackground">@color/aether_window_bg</item>
         <item name="android:colorAccent">#D97757</item>
-        <item name="android:statusBarColor">#F9F6F0</item>
-        <item name="android:navigationBarColor">#F9F6F0</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">@bool/aether_light_bars</item>
     </style>
 </resources>

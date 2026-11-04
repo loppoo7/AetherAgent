@@ -2,18 +2,17 @@ package com.aether.agent.presentation.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,7 +22,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.OutlinedTextField
@@ -42,13 +40,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aether.agent.domain.model.ChatSession
 import com.aether.agent.presentation.ui.theme.LocalAetherPalette
-import com.aether.agent.presentation.ui.theme.Terracotta
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
-/** Drawer kiri: header, Chat Baru, riwayat per waktu, dan footer pengaturan + status GitHub. */
+private val Connected = Color(0xFF22C55E)
+
+/** Drawer kiri: nama app, Chat Baru, riwayat per waktu, lalu footer pengaturan dan status GitHub. */
 @Composable
 fun AppDrawer(
     sessions: List<ChatSession>,
@@ -67,39 +66,32 @@ fun AppDrawer(
         modifier = Modifier.width(304.dp),
         drawerContainerColor = MaterialTheme.colorScheme.surface,
     ) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            Row(
-                Modifier.padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    Modifier
-                        .size(34.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Terracotta),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("A", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                }
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text("AetherAgent", style = MaterialTheme.typography.headlineSmall)
-                    Text(modelLabel, style = MaterialTheme.typography.labelSmall, color = palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+        Column(Modifier.fillMaxSize()) {
+            Column(Modifier.padding(start = 22.dp, end = 22.dp, top = 18.dp, bottom = 4.dp)) {
+                Text("AetherAgent", style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    modelLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = palette.muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
 
             Button(
                 onClick = onNewChat,
                 enabled = !running,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                shape = RoundedCornerShape(16.dp),
             ) {
-                Text("+  Chat Baru", style = MaterialTheme.typography.labelLarge)
+                AIcon(AetherIcon.Plus, size = 18.dp, strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+                Text("Chat Baru", style = MaterialTheme.typography.labelLarge)
             }
 
             LazyColumn(
                 Modifier.weight(1f).padding(horizontal = 10.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 12.dp),
+                contentPadding = PaddingValues(bottom = 12.dp),
             ) {
                 groupSessions(sessions).forEach { (label, group) ->
                     item(key = "header-$label") {
@@ -127,20 +119,28 @@ fun AppDrawer(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .clickable(onClick = onSettings)
+                    .padding(horizontal = 22.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onSettings) {
-                    Text("⚙  Pengaturan", style = MaterialTheme.typography.labelLarge)
-                }
+                AIcon(AetherIcon.Settings, size = 20.dp)
+                Spacer(Modifier.width(14.dp))
+                Text("Pengaturan", style = MaterialTheme.typography.labelLarge)
             }
-            Text(
-                if (githubLogin.isNotBlank()) "● Terhubung sebagai @$githubLogin" else "○ GitHub belum terhubung",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (githubLogin.isNotBlank()) Color(0xFF22C55E) else palette.muted,
-                modifier = Modifier.padding(start = 20.dp, bottom = 20.dp),
-            )
+            Row(
+                Modifier.padding(start = 22.dp, end = 22.dp, bottom = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StatusDot(if (githubLogin.isNotBlank()) Connected else palette.border)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (githubLogin.isNotBlank()) "Terhubung sebagai @$githubLogin" else "GitHub belum terhubung",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = palette.muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -168,7 +168,7 @@ private fun SessionRow(
                 .clip(RoundedCornerShape(14.dp))
                 .background(if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
                 .combinedClickable(enabled = enabled, onClick = onSelect, onLongClick = { menuOpen = true })
-                .padding(start = 14.dp, end = 2.dp, top = 8.dp, bottom = 8.dp),
+                .padding(start = 14.dp, end = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -176,11 +176,17 @@ private fun SessionRow(
                 style = MaterialTheme.typography.labelLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).padding(vertical = 12.dp),
             )
-            IconButton(onClick = { menuOpen = true }, enabled = enabled) {
-                Text("⋯", color = palette.muted)
-            }
+            IconAction(
+                icon = AetherIcon.More,
+                description = "Opsi chat",
+                onClick = { menuOpen = true },
+                tint = palette.muted,
+                enabled = enabled,
+                boxSize = 40.dp,
+                iconSize = 20.dp,
+            )
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
