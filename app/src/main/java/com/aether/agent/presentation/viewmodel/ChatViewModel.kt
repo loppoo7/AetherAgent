@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aether.agent.domain.agent.ActionStatus
 import com.aether.agent.domain.agent.AgentEvent
+import com.aether.agent.domain.model.AgentSettings
 import com.aether.agent.domain.model.Message
+import com.aether.agent.domain.repository.SettingsRepository
 import com.aether.agent.domain.usecase.ClearChatUseCase
 import com.aether.agent.domain.usecase.ObserveChatUseCase
 import com.aether.agent.domain.usecase.RunAgentUseCase
@@ -34,10 +36,14 @@ class ChatViewModel @Inject constructor(
     observeChat: ObserveChatUseCase,
     private val runAgent: RunAgentUseCase,
     private val clearChat: ClearChatUseCase,
+    settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     val messages: StateFlow<List<Message>> =
         observeChat(SESSION_ID).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val settings: StateFlow<AgentSettings> =
+        settingsRepository.observeSettings().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgentSettings())
 
     private val _cards = MutableStateFlow<List<AgentCard>>(emptyList())
     val cards: StateFlow<List<AgentCard>> = _cards.asStateFlow()

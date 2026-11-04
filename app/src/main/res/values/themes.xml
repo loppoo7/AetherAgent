@@ -1,1 +1,9 @@
-<resources><style name="Theme.AetherAgent" parent="android:style/Theme.Material.Light.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">#6750A4</item><item name="android:windowLightStatusBar">true</item></style></resources>
+<resources>
+    <style name="Theme.AetherAgent" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorAccent">#D97757</item>
+        <item name="android:statusBarColor">#F9F6F0</item>
+        <item name="android:navigationBarColor">#F9F6F0</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

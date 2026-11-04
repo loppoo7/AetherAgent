@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.aether.agent.domain.model.AgentSettings
 import com.aether.agent.domain.model.Provider
+import com.aether.agent.domain.model.ThemeMode
 import com.aether.agent.presentation.viewmodel.SettingsViewModel
 
 @Composable
@@ -41,6 +42,20 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Pengaturan", style = MaterialTheme.typography.headlineSmall)
+
+        SectionTitle("Tampilan")
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ThemeMode.entries.forEach { m ->
+                FilterChip(
+                    selected = draft.themeMode == m,
+                    onClick = { draft = draft.copy(themeMode = m) },
+                    label = { Text(m.label) },
+                )
+            }
+        }
 
         SectionTitle("Model AI")
         Row(
