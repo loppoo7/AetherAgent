@@ -1,2 +1,18 @@
 package com.aether.agent.domain.agent_tools
-interface AgentTool { val name:String; val description:String; suspend fun execute(input:String):String }
+
+import kotlinx.serialization.json.JsonObject
+
+interface AgentTool {
+    val name: String
+    val description: String
+    /** JSON Schema parameter (object). */
+    val parameters: JsonObject
+    /** Aksi yang mengubah repo harus disetujui pengguna jika confirmWrites aktif. */
+    val requiresApproval: Boolean get() = false
+
+    /** Label singkat untuk action card, contoh: "Menulis app/Main.kt". */
+    fun describe(args: JsonObject): String
+    /** Diff yang ditampilkan di dialog persetujuan. */
+    suspend fun preview(args: JsonObject): String = ""
+    suspend fun execute(args: JsonObject): String
+}

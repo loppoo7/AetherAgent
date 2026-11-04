@@ -1,48 +1,57 @@
 # AetherAgent
 
-Android AI agent built with Kotlin, Jetpack Compose, Hilt, Room, DataStore, and Ktor.
+Agen AI untuk coding dan manajemen repositori GitHub, dibuat dengan Kotlin, Jetpack Compose, Hilt, Room, DataStore, dan Ktor.
 
-## Features in this scaffold
+## Fitur
 
-- OpenAI-compatible `/chat/completions` API connection.
-- Chat history persisted locally with Room.
-- LLM endpoint, model, API key, and optional GitHub token stored with Preferences DataStore.
-- GitHub repository search and DuckDuckGo HTML search tools registered through Hilt multibindings.
-- Compose chat and settings screens.
-- GitHub Actions workflow for debug APK and optional signed release APK.
+- **Multi-provider LLM**: OpenAI (GPT-4o), Anthropic (Claude 3.5 Sonnet), DeepSeek (`deepseek-chat`, atau `deepseek-coder` lewat kolom model), dan OpenRouter. Pilihan provider dan model bisa diganti kapan saja di Pengaturan. API key disimpan per provider, jadi berpindah provider tidak menghapus key yang sudah diisi.
+- **Tool calling / agen otonom**: model bisa memanggil tool GitHub dalam loop sampai menghasilkan jawaban akhir (maksimal 8 langkah per instruksi).
+  - Baca: daftar file (tree), isi file, riwayat commit, issue dan PR terbuka.
+  - Tulis: buat atau ubah file, hapus file, buat branch, buat pull request.
+  - Pencarian web (DuckDuckGo HTML).
+- **Konfirmasi perubahan**: aksi tulis (write, delete, PR) menampilkan diff baris sebelum dijalankan. Bisa dimatikan di Pengaturan.
+- **Action card**: setiap tool call tampil sebagai kartu Berjalan / Selesai / Gagal / Ditolak. Ketuk kartu untuk melihat output.
+- **Markdown**: heading, list, daftar bernomor, **bold**, `inline code`, dan blok kode dengan highlight sederhana serta tombol Salin.
+- **System prompt** dapat diedit di Pengaturan.
+- **Riwayat chat** disimpan di Room dan dipakai sebagai konteks untuk pesan berikutnya.
+
+## Yang belum ada
+
+- Lampiran file atau context picker.
+- Streaming token (jawaban muncul sekaligus setelah model selesai).
+- Cache tree repo di Room.
+- Login GitHub OAuth. Saat ini hanya Personal Access Token.
+- Anthropic memakai Messages API native; provider lain memakai `/chat/completions`.
 
 ## Build
 
-Requirements: JDK 17, Android SDK 35, and Gradle 8.9.
-
-The repository is bootstrapped with a Gradle wrapper fallback script. On the first GitHub Actions run, CI installs Gradle 8.9, generates the official wrapper JAR/scripts, and commits those generated wrapper files to `main`. After that, use:
+Butuh JDK 17, Android SDK 35, dan Gradle 8.9.
 
 ```bash
 ./gradlew assembleDebug
 ```
 
-## Configure the app
+Workflow di `.github/workflows/build-apk.yml` membuat APK debug di setiap push. APK release ditandatangani jika secret keystore tersedia.
 
-Open **Pengaturan** in the app and set:
+## Konfigurasi
 
-- **Base URL**: default `https://api.openai.com/v1`; must be an OpenAI-compatible API base URL.
-- **API key LLM**: provider API key.
-- **Model**: model identifier accepted by the selected provider.
-- **GitHub token**: optional token for higher GitHub API rate limits.
+Buka **Pengaturan** di aplikasi:
 
-The app calls `{Base URL}/chat/completions`. API keys are stored in Android Preferences DataStore on-device; do not commit keys to this repository.
+- **Provider dan API key** untuk model yang dipilih.
+- **Personal access token GitHub** (fine-grained, izin "Contents: Read and write" dan "Pull requests: Read and write" untuk repo yang dituju).
+- **Owner, nama repo, dan branch kerja**. Disarankan branch khusus seperti `ai-changes`, bukan `main`.
 
-## Release signing
+## Catatan keamanan
 
-Add these GitHub Actions repository secrets:
+- API key dan token GitHub disimpan lewat Preferences DataStore di perangkat. DataStore tidak mengenkripsi nilai. Untuk penyimpanan terenkripsi, ganti `SettingsDataStore` dengan Android Keystore atau EncryptedSharedPreferences.
+- Jangan commit key ke repo. `.gitignore` sudah mengabaikan `local.properties` dan keystore.
+- Agen mengirim isi file repo ke provider LLM yang dipilih. Jangan gunakan repo yang berisi rahasia.
 
-- `KEYSTORE_BASE64`
-- `KEYSTORE_PASSWORD`
-- `KEY_ALIAS`
-- `KEY_PASSWORD`
+## Struktur
 
-Without the keystore secrets, CI builds and uploads the debug APK only. Release builds use the configured release keystore when the secrets are present.
-
-## Notes
-
-The initial scaffold keeps `domain/agent_tools` as requested. Tool classes are registered in the dependency graph; tool execution is exposed through `ToolRegistry` and is not yet automatically orchestrated by the chat completion loop.
+```
+data/      api (GitHub client, LLM gateway), local (DataStore, Room), repository, mapper
+domain/    model, repository (interface), agent (AgentRunner, AgentEvent), agent_tools, usecase
+presentation/  ui (chat, settings, theme), components, viewmodel, navigation
+di/        modul Hilt
+```
