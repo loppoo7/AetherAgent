@@ -1,5 +1,7 @@
 package com.aether.agent.presentation.components
 
+import com.aether.agent.presentation.ui.theme.AetherMono
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -81,7 +83,7 @@ fun CodeBlockView(code: String, language: String) {
         }
         Text(
             highlighted,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = AetherMono,
             fontSize = 13.sp,
             color = palette.codeText,
             modifier = Modifier

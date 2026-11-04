@@ -1,5 +1,7 @@
 package com.aether.agent.presentation.components
 
+import com.aether.agent.presentation.ui.theme.AetherMono
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -65,7 +67,7 @@ fun AgentActionCard(card: AgentCard) {
                 Text(
                     card.output.take(2000),
                     style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = AetherMono,
                     color = palette.muted,
                     modifier = Modifier.padding(top = 8.dp),
                 )

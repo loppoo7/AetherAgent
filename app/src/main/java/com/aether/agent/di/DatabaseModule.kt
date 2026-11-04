@@ -1,4 +1,5 @@
 package com.aether.agent.di
+
 import android.content.Context
 import androidx.room.Room
 import com.aether.agent.data.local.db.AppDatabase
@@ -9,7 +10,17 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
-@Module @InstallIn(SingletonComponent::class) object DatabaseModule {
- @Provides @Singleton fun provideDatabase(@ApplicationContext context:Context)=Room.databaseBuilder(context,AppDatabase::class.java,"aether.db").build()
- @Provides fun provideChatDao(database:AppDatabase):ChatDao=database.chatDao()
+
+@Module
+@InstallIn(SingletonComponent::class)
+object DatabaseModule {
+    @Provides
+    @Singleton
+    fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
+        Room.databaseBuilder(context, AppDatabase::class.java, "aether.db")
+            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .build()
+
+    @Provides
+    fun provideChatDao(database: AppDatabase): ChatDao = database.chatDao()
 }

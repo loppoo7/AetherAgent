@@ -1,5 +1,7 @@
 package com.aether.agent.presentation.components
 
+import com.aether.agent.presentation.ui.theme.AetherMono
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -124,7 +126,7 @@ internal fun inlineMarkdown(text: String): AnnotatedString = buildAnnotatedStrin
         if (bold != null) {
             withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(m.groupValues[1]) }
         } else {
-            withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Color(0x33888888))) {
+            withStyle(SpanStyle(fontFamily = AetherMono, background = Color(0x33888888))) {
                 append(m.groupValues[2])
             }
         }

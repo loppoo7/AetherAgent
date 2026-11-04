@@ -35,7 +35,9 @@ dependencies {
     implementation(libs.hilt.android); ksp(libs.hilt.compiler)
     implementation(libs.kotlinx.coroutines.android); implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.android); implementation(libs.ktor.client.content.negotiation); implementation(libs.ktor.serialization.kotlinx.json)
-    implementation(libs.androidx.datastore.preferences); implementation(libs.androidx.room.runtime); implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.datastore.preferences)
+    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("androidx.compose.ui:ui-text-google-fonts"); implementation(libs.androidx.room.runtime); implementation(libs.androidx.room.ktx)
     ksp("androidx.room:room-compiler:2.6.1")
     implementation(libs.markdown.renderer)
 }

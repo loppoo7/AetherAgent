@@ -14,11 +14,21 @@ enum class ThemeMode(val label: String) {
     DARK("Gelap"),
 }
 
+/** Gaya jawaban dipetakan ke temperature model. */
+enum class AnswerStyle(val label: String, val temperature: Double, val hint: String) {
+    RENDAH("Rendah", 0.1, "Konsisten dan fokus, cocok untuk edit kode dan commit"),
+    SEDANG("Sedang", 0.3, "Seimbang antara teliti dan luwes"),
+    TINGGI("Tinggi", 0.7, "Lebih bervariasi, cocok untuk brainstorming ide"),
+}
+
 data class AgentSettings(
     val provider: Provider = Provider.OPENAI,
     val apiKeys: Map<Provider, String> = emptyMap(),
     val model: String = Provider.OPENAI.defaultModel,
+    val answerStyle: AnswerStyle = AnswerStyle.SEDANG,
     val githubToken: String = "",
+    val githubLogin: String = "",
+    val githubAvatarUrl: String = "",
     val githubOwner: String = "",
     val githubRepo: String = "",
     val githubBranch: String = "ai-changes",

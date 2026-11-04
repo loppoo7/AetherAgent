@@ -58,6 +58,7 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
     ): LlmReply {
         val body = buildJsonObject {
             put("model", s.model)
+            put("temperature", s.answerStyle.temperature)
             putJsonArray("messages") {
                 add(buildJsonObject { put("role", "system"); put("content", system) })
                 messages.forEach { add(it.toOpenAi()) }
@@ -107,6 +108,7 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
         val body = buildJsonObject {
             put("model", s.model)
             put("max_tokens", 4096)
+            put("temperature", minOf(s.answerStyle.temperature, 1.0))
             put("system", system)
             putJsonArray("messages") { anthropicMessages(messages).forEach { add(it) } }
             if (tools.isNotEmpty()) {

@@ -5,8 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.aether.agent.domain.agent.ActionStatus
 import com.aether.agent.domain.agent.AgentEvent
 import com.aether.agent.domain.model.AgentSettings
+import com.aether.agent.domain.model.ChatSession
 import com.aether.agent.domain.model.Message
 import com.aether.agent.domain.repository.SettingsRepository
+import com.aether.agent.domain.usecase.ChatSessionsUseCase
 import com.aether.agent.domain.usecase.ClearChatUseCase
 import com.aether.agent.domain.usecase.ObserveChatUseCase
 import com.aether.agent.domain.usecase.RunAgentUseCase
@@ -19,10 +21,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-
-const val SESSION_ID = "main"
 
 enum class CardState { RUNNING, OK, FAILED, REJECTED }
 
@@ -33,17 +36,25 @@ data class PendingApproval(val title: String, val diff: String, val decision: Co
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
-    observeChat: ObserveChatUseCase,
+    private val observeChat: ObserveChatUseCase,
     private val runAgent: RunAgentUseCase,
     private val clearChat: ClearChatUseCase,
+    private val sessions: ChatSessionsUseCase,
     settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
-    val messages: StateFlow<List<Message>> =
-        observeChat(SESSION_ID).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val sessionList: StateFlow<List<ChatSession>> =
+        sessions.observe().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val settings: StateFlow<AgentSettings> =
         settingsRepository.observeSettings().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgentSettings())
+
+    private val _activeId = MutableStateFlow("")
+    val activeSessionId: StateFlow<String> = _activeId.asStateFlow()
+
+    val messages: StateFlow<List<Message>> = _activeId
+        .flatMapLatest { id -> if (id.isEmpty()) flowOf(emptyList<Message>()) else observeChat(id) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _cards = MutableStateFlow<List<AgentCard>>(emptyList())
     val cards: StateFlow<List<AgentCard>> = _cards.asStateFlow()
@@ -59,14 +70,21 @@ class ChatViewModel @Inject constructor(
 
     private var job: Job? = null
 
+    init {
+        viewModelScope.launch {
+            _activeId.value = sessions.observe().first().firstOrNull()?.id ?: sessions.create()
+        }
+    }
+
     fun send(text: String) {
-        if (text.isBlank() || _running.value) return
+        val id = _activeId.value
+        if (text.isBlank() || _running.value || id.isEmpty()) return
         _running.value = true
         _error.value = null
         _cards.value = emptyList()
         job = viewModelScope.launch {
             try {
-                runAgent(SESSION_ID, text.trim()).collect { event -> onEvent(event) }
+                runAgent(id, text.trim()).collect { event -> onEvent(event) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -109,7 +127,35 @@ class ChatViewModel @Inject constructor(
         job?.cancel()
     }
 
+    fun newChat() {
+        if (_running.value) return
+        viewModelScope.launch { selectSession(sessions.create()) }
+    }
+
+    fun selectSession(id: String) {
+        if (_running.value) return
+        _activeId.value = id
+        _cards.value = emptyList()
+        _error.value = null
+    }
+
+    fun renameSession(id: String, title: String) {
+        viewModelScope.launch { sessions.rename(id, title) }
+    }
+
+    fun deleteSession(id: String) {
+        if (_running.value && id == _activeId.value) return
+        viewModelScope.launch {
+            sessions.delete(id)
+            if (_activeId.value == id) {
+                _activeId.value = sessions.observe().first().firstOrNull()?.id ?: sessions.create()
+                _cards.value = emptyList()
+            }
+        }
+    }
+
+    /** Kosongkan isi chat yang sedang dibuka, sesinya tetap ada. */
     fun clear() {
-        viewModelScope.launch { clearChat(SESSION_ID) }
+        viewModelScope.launch { clearChat(_activeId.value) }
     }
 }

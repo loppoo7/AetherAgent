@@ -22,10 +22,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -36,7 +41,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,82 +53,107 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.aether.agent.presentation.components.AgentActionCard
 import com.aether.agent.presentation.components.ApprovalDialog
+import com.aether.agent.presentation.components.AppDrawer
 import com.aether.agent.presentation.components.ChatBubble
 import com.aether.agent.presentation.components.ThinkingIndicator
 import com.aether.agent.presentation.ui.theme.LocalAetherPalette
 import com.aether.agent.presentation.ui.theme.Terracotta
 import com.aether.agent.presentation.viewmodel.CardState
 import com.aether.agent.presentation.viewmodel.ChatViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel()) {
+    val sessions by viewModel.sessionList.collectAsState()
+    val activeId by viewModel.activeSessionId.collectAsState()
     val messages by viewModel.messages.collectAsState()
     val cards by viewModel.cards.collectAsState()
     val running by viewModel.running.collectAsState()
     val error by viewModel.error.collectAsState()
     val approval by viewModel.approval.collectAsState()
     val settings by viewModel.settings.collectAsState()
+
     val listState = rememberLazyListState()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
     var input by rememberSaveable { mutableStateOf("") }
 
-    // Judul aksi yang sedang berjalan dipakai sebagai status "berpikir".
     val status = cards.lastOrNull { it.state == CardState.RUNNING }?.title
+    val title = sessions.firstOrNull { it.id == activeId }?.title ?: "AetherAgent"
 
     LaunchedEffect(messages.size, cards.size, running) {
         val last = listState.layoutInfo.totalItemsCount - 1
         if (last >= 0) listState.animateScrollToItem(last)
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            AppDrawer(
+                sessions = sessions,
+                activeId = activeId,
+                running = running,
+                modelLabel = "${settings.provider.label} · ${settings.model}",
+                githubLogin = settings.githubLogin,
+                onNewChat = {
+                    viewModel.newChat()
+                    scope.launch { drawerState.close() }
+                },
+                onSelect = { id ->
+                    viewModel.selectSession(id)
+                    scope.launch { drawerState.close() }
+                },
+                onRename = viewModel::renameSession,
+                onDelete = viewModel::deleteSession,
+                onSettings = {
+                    scope.launch { drawerState.close() }
+                    onSettings()
+                },
+            )
+        },
     ) {
-        TopBar(
-            title = if (settings.githubOwner.isNotBlank() && settings.githubRepo.isNotBlank()) {
-                "${settings.githubOwner}/${settings.githubRepo}"
-            } else {
-                "AetherAgent"
-            },
-            subtitle = "${settings.githubBranch} · ${settings.model}",
-            onSettings = onSettings,
-            onClear = viewModel::clear,
-        )
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            TopBar(
+                title = title,
+                onMenu = { scope.launch { drawerState.open() } },
+                onClear = viewModel::clear,
+            )
 
-        LazyColumn(
-            Modifier.weight(1f).fillMaxWidth(),
-            state = listState,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
-            if (messages.isEmpty() && cards.isEmpty() && !running) {
-                item { EmptyState() }
-            }
-            items(messages, key = { it.id }) { ChatBubble(it) }
-            items(cards, key = { it.id }) { AgentActionCard(it) }
-            if (running) item { ThinkingIndicator(status = status) }
-            error?.let { message ->
-                item {
-                    Text(
-                        "Error: $message",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+            LazyColumn(
+                Modifier.weight(1f).fillMaxWidth(),
+                state = listState,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                if (messages.isEmpty() && cards.isEmpty() && !running) {
+                    item { EmptyState() }
+                }
+                items(messages, key = { it.id }) { ChatBubble(it) }
+                items(cards, key = { it.id }) { AgentActionCard(it) }
+                if (running) item { ThinkingIndicator(status = status) }
+                error?.let { message ->
+                    item {
+                        Text(
+                            "Error: $message",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
-        }
 
-        InputBar(
-            text = input,
-            onTextChange = { input = it },
-            running = running,
-            onSend = {
-                viewModel.send(input)
-                input = ""
-            },
-            onStop = viewModel::stop,
-            onAttach = { /* Lampiran file/repo belum diimplementasikan. */ },
-        )
+            InputBar(
+                text = input,
+                onTextChange = { input = it },
+                running = running,
+                onSend = {
+                    viewModel.send(input)
+                    input = ""
+                },
+                onStop = viewModel::stop,
+                onAttach = { /* Lampiran file/repo belum diimplementasikan. */ },
+            )
+        }
     }
 
     approval?.let { pending ->
@@ -132,38 +162,32 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
 }
 
 @Composable
-private fun TopBar(title: String, subtitle: String, onSettings: () -> Unit, onClear: () -> Unit) {
+private fun TopBar(title: String, onMenu: () -> Unit, onClear: () -> Unit) {
     val palette = LocalAetherPalette.current
     var menuOpen by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        IconButton(onClick = onMenu) {
+            Text("☰", style = MaterialTheme.typography.titleLarge, color = palette.muted)
         }
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(start = 4.dp),
+        )
         Box {
             IconButton(onClick = { menuOpen = true }) {
                 Text("⋯", style = MaterialTheme.typography.titleLarge, color = palette.muted)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
-                    text = { Text("Pengaturan") },
-                    onClick = {
-                        menuOpen = false
-                        onSettings()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("Hapus riwayat") },
+                    text = { Text("Kosongkan chat ini") },
                     onClick = {
                         menuOpen = false
                         onClear()

@@ -18,5 +18,23 @@ interface ChatDao {
     suspend fun insert(message: MessageEntity)
 
     @Query("DELETE FROM messages WHERE sessionId = :sessionId")
-    suspend fun clearSession(sessionId: String)
+    suspend fun clearMessages(sessionId: String)
+
+    @Query("SELECT * FROM chat_sessions ORDER BY updatedAt DESC")
+    fun observeSessions(): Flow<List<ChatSessionEntity>>
+
+    @Query("SELECT * FROM chat_sessions WHERE id = :id")
+    suspend fun getSession(id: String): ChatSessionEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSession(session: ChatSessionEntity)
+
+    @Query("UPDATE chat_sessions SET title = :title WHERE id = :id")
+    suspend fun renameSession(id: String, title: String)
+
+    @Query("UPDATE chat_sessions SET updatedAt = :updatedAt WHERE id = :id")
+    suspend fun touchSession(id: String, updatedAt: Long)
+
+    @Query("DELETE FROM chat_sessions WHERE id = :id")
+    suspend fun deleteSession(id: String)
 }

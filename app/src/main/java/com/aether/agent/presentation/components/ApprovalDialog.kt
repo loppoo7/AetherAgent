@@ -1,5 +1,7 @@
 package com.aether.agent.presentation.components
 
+import com.aether.agent.presentation.ui.theme.AetherMono
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -46,7 +48,7 @@ fun ApprovalDialog(pending: PendingApproval, onResolve: (Boolean) -> Unit) {
                         pending.diff.lines().forEach { line ->
                             Text(
                                 line,
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = AetherMono,
                                 fontSize = 12.sp,
                                 color = when {
                                     line.startsWith("+") -> Color(0xFF22C55E)
