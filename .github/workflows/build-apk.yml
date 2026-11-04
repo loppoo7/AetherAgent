@@ -31,6 +31,7 @@ jobs:
           gradle wrapper --gradle-version 8.9
           chmod +x gradlew
       - name: Commit wrapper files when bootstrapping an empty repository
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git add gradlew gradlew.bat gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.properties
           if ! git diff --cached --quiet; then
