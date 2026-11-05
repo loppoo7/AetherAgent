@@ -27,7 +27,7 @@ class ConnectGithubUseCase @Inject constructor(
         val code = auth.requestDeviceCode(GITHUB_CLIENT_ID)
         emit(GithubLoginState.WaitingForUser(code.userCode, code.verificationUri))
 
-        var interval = code.intervalSeconds.toLong()
+        var interval = maxOf(5L, code.intervalSeconds.toLong())
         val deadline = System.currentTimeMillis() + code.expiresInSeconds * 1000L
         while (System.currentTimeMillis() < deadline) {
             delay(interval * 1000)
