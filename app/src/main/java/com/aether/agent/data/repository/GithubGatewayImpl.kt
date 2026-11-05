@@ -10,6 +10,7 @@ import com.aether.agent.domain.repository.SettingsRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -21,20 +22,36 @@ class GithubGatewayImpl @Inject constructor(
     private val client: GithubClient,
     private val settings: SettingsRepository,
 ) : GithubGateway {
+    private suspend fun currentSettings() = settings.observeSettings().first()
 
     private suspend fun config(): GithubConfig {
-        val s = settings.observeSettings().first()
+        val s = currentSettings()
         require(s.githubOwner.isNotBlank() && s.githubRepo.isNotBlank()) {
-            "Owner dan nama repo GitHub belum diatur di Pengaturan."
+            "Pilih setidaknya satu repository GitHub terlebih dahulu."
         }
         return GithubConfig(s.githubToken, s.githubOwner, s.githubRepo, s.githubBranch)
     }
 
+    private suspend fun configForTarget(target: String): GithubConfig {
+        val s = currentSettings()
+        val fullName = target.substringBefore('|').trim()
+        val owner = fullName.substringBefore('/')
+        val repo = fullName.substringAfter('/', "")
+        require(owner.isNotBlank() && repo.isNotBlank()) { "Target repository tidak valid: $target" }
+        return GithubConfig(s.githubToken, owner, repo, target.substringAfter('|', "").ifBlank { s.githubBranch })
+    }
+
+    private fun decodeFile(file: JsonObject?): String? {
+        if (file == null) return null
+        val encoded = file["content"]?.jsonPrimitive?.contentOrNull.orEmpty().replace("\n", "")
+        return if (encoded.isBlank()) "" else Base64.decode(encoded, Base64.DEFAULT).toString(Charsets.UTF_8)
+    }
+
     override suspend fun listRepos(): List<GithubRepo> = readableErrors {
-        val token = settings.observeSettings().first().githubToken
-        require(token.isNotBlank()) { "Hubungkan akun GitHub di Pengaturan dulu." }
+        val token = currentSettings().githubToken
+        require(token.isNotBlank()) { "Akun GitHub belum terhubung. Hubungkan GitHub melalui Device Flow terlebih dahulu." }
         val out = mutableListOf<GithubRepo>()
-        for (page in 1..3) {
+        for (page in 1..10) {
             val batch = client.userRepos(token, page)
             for (e in batch) {
                 val o = e.jsonObject
@@ -53,34 +70,51 @@ class GithubGatewayImpl @Inject constructor(
         out
     }
 
-    override suspend fun listFiles(): List<String> = readableErrors {
-        val c = config()
+    private suspend fun treeFiles(c: GithubConfig): List<String> =
         client.tree(c)["tree"]?.jsonArray.orEmpty().mapNotNull { e ->
             val o = e.jsonObject
             if (o["type"]?.jsonPrimitive?.content == "blob") o["path"]?.jsonPrimitive?.content else null
         }
-    }
 
-    override suspend fun readFile(path: String): String? = readableErrors {
-        val c = config()
-        val f = client.file(c, path) ?: return@readableErrors null
-        val b64 = f["content"]?.jsonPrimitive?.content.orEmpty().replace("\n", "")
-        Base64.decode(b64, Base64.DEFAULT).toString(Charsets.UTF_8)
+    override suspend fun listFiles(): List<String> = readableErrors { treeFiles(config()) }
+    override suspend fun listFiles(repoTarget: String): List<String> = readableErrors { treeFiles(configForTarget(repoTarget)) }
+    override suspend fun readFile(path: String): String? = readableErrors { decodeFile(client.file(config(), path)) }
+    override suspend fun readFile(repoTarget: String, path: String): String? =
+        readableErrors { decodeFile(client.file(configForTarget(repoTarget), path)) }
+
+    override suspend fun readFileAcrossTargets(path: String): String = readableErrors {
+        val s = currentSettings()
+        val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
+        targets.sorted().joinToString("\n\n") { target ->
+            "===== ${target.substringBefore('|')} · $path =====\n" +
+                (readFile(target, path) ?: "(file tidak ditemukan)")
+        }
     }
 
     override suspend fun writeFile(path: String, content: String, message: String): String = readableErrors {
-        val c = config()
-        val sha = client.file(c, path)?.get("sha")?.jsonPrimitive?.content
-        val res = client.putFile(c, path, content, message, sha)
-        res["content"]?.jsonObject?.get("html_url")?.jsonPrimitive?.content.orEmpty()
+        val s = currentSettings()
+        val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
+        require(targets.isNotEmpty()) { "Pilih repository GitHub terlebih dahulu." }
+        val outcomes = targets.sorted().map { target ->
+            val c = configForTarget(target)
+            val sha = client.file(c, path)?.get("sha")?.jsonPrimitive?.content
+            val result = client.putFile(c, path, content, message, sha)
+            "${c.owner}/${c.repo}: " + result["content"]?.jsonObject?.get("html_url")?.jsonPrimitive?.content.orEmpty()
+        }
+        "Perubahan berhasil dikirim ke ${outcomes.size} repository:\n" + outcomes.joinToString("\n")
     }
 
     override suspend fun deleteFile(path: String, message: String): String = readableErrors {
-        val c = config()
-        val sha = client.file(c, path)?.get("sha")?.jsonPrimitive?.content
-            ?: error("File $path tidak ditemukan.")
-        client.deleteFile(c, path, message, sha)
-        "Dihapus: $path"
+        val s = currentSettings()
+        val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
+        val outcomes = targets.sorted().map { target ->
+            val c = configForTarget(target)
+            val sha = client.file(c, path)?.get("sha")?.jsonPrimitive?.content
+                ?: error("File $path tidak ditemukan di ${c.owner}/${c.repo}.")
+            client.deleteFile(c, path, message, sha)
+            "${c.owner}/${c.repo}: dihapus"
+        }
+        "Penghapusan berhasil di ${outcomes.size} repository:\n" + outcomes.joinToString("\n")
     }
 
     override suspend fun createBranch(name: String, from: String): String = readableErrors {
@@ -100,8 +134,7 @@ class GithubGatewayImpl @Inject constructor(
         client.commits(c, limit).map { e ->
             val o = e.jsonObject
             val sha = o["sha"]?.jsonPrimitive?.content.orEmpty().take(7)
-            val msg = o["commit"]?.jsonObject?.get("message")?.jsonPrimitive?.content.orEmpty()
-                .lineSequence().firstOrNull().orEmpty()
+            val msg = o["commit"]?.jsonObject?.get("message")?.jsonPrimitive?.content.orEmpty().lineSequence().firstOrNull().orEmpty()
             "$sha $msg"
         }
     }
