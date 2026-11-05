@@ -79,10 +79,14 @@ class GithubGatewayImpl @Inject constructor(
     override suspend fun listFiles(): List<String> = readableErrors {
         val s = currentSettings()
         val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
-        targets.sorted().flatMap { target ->
+        val allFiles = mutableListOf<String>()
+        for (target in targets.sorted()) {
             val label = target.substringBefore('|')
-            treeFiles(configForTarget(target)).map { "$label/$it" }
+            for (filePath in treeFiles(configForTarget(target))) {
+                allFiles += "$label/$filePath"
+            }
         }
+        allFiles
     }
     override suspend fun listFiles(repoTarget: String): List<String> = readableErrors { treeFiles(configForTarget(repoTarget)) }
     override suspend fun readFile(path: String): String? = readableErrors {
@@ -108,11 +112,12 @@ class GithubGatewayImpl @Inject constructor(
         val s = currentSettings()
         val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
         require(targets.isNotEmpty()) { "Pilih repository GitHub terlebih dahulu." }
-        val outcomes = targets.sorted().map { target ->
+        val outcomes = mutableListOf<String>()
+        for (target in targets.sorted()) {
             val c = configForTarget(target)
             val sha = client.file(c, path)?.get("sha")?.jsonPrimitive?.content
             val result = client.putFile(c, path, content, message, sha)
-            "${c.owner}/${c.repo}: " + result["content"]?.jsonObject?.get("html_url")?.jsonPrimitive?.content.orEmpty()
+            outcomes += "${c.owner}/${c.repo}: " + result["content"]?.jsonObject?.get("html_url")?.jsonPrimitive?.content.orEmpty()
         }
         "Perubahan berhasil dikirim ke ${outcomes.size} repository:\n" + outcomes.joinToString("\n")
     }
@@ -120,12 +125,13 @@ class GithubGatewayImpl @Inject constructor(
     override suspend fun deleteFile(path: String, message: String): String = readableErrors {
         val s = currentSettings()
         val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
-        val outcomes = targets.sorted().map { target ->
+        val outcomes = mutableListOf<String>()
+        for (target in targets.sorted()) {
             val c = configForTarget(target)
             val sha = client.file(c, path)?.get("sha")?.jsonPrimitive?.content
                 ?: error("File $path tidak ditemukan di ${c.owner}/${c.repo}.")
             client.deleteFile(c, path, message, sha)
-            "${c.owner}/${c.repo}: dihapus"
+            outcomes += "${c.owner}/${c.repo}: dihapus"
         }
         "Penghapusan berhasil di ${outcomes.size} repository:\n" + outcomes.joinToString("\n")
     }
