@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonObject
 
 class ListFilesTool @Inject constructor(private val github: GithubGateway) : AgentTool {
     override val name = "github_list_files"
-    override val description = "Tampilkan daftar semua file di branch repo aktif (struktur tree)."
+    override val description = "Tampilkan daftar file dari semua repository target yang dipilih."
     override val parameters = objectSchema()
     override fun describe(args: JsonObject) = "Membaca struktur repo"
     override suspend fun execute(args: JsonObject): String {
@@ -19,7 +19,7 @@ class ListFilesTool @Inject constructor(private val github: GithubGateway) : Age
 
 class ReadFileTool @Inject constructor(private val github: GithubGateway) : AgentTool {
     override val name = "github_read_file"
-    override val description = "Baca isi sebuah file di repo aktif."
+    override val description = "Baca isi file dari repository target yang dipilih; jika beberapa repo dipilih, tampilkan tiap versinya."
     override val parameters = objectSchema(mapOf("path" to "Path file, contoh: app/src/Main.kt"), listOf("path"))
     override fun describe(args: JsonObject) = "Membaca ${args.str("path")}"
     override suspend fun execute(args: JsonObject): String {
