@@ -33,6 +33,8 @@ android {
     buildFeatures { compose = true }
 }
 dependencies {
+    implementation("com.hierynomus:sshj:0.38.0")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui); implementation(libs.androidx.compose.material3); implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)

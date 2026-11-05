@@ -42,6 +42,11 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         val panelUrl = stringPreferencesKey("ptero_url")
         val pteroKey = stringPreferencesKey("ptero_key")
         val serverMode = stringPreferencesKey("server_agent_mode")
+        val sftpHost = stringPreferencesKey("sftp_host")
+        val sftpPort = stringPreferencesKey("sftp_port")
+        val sftpUser = stringPreferencesKey("sftp_user")
+        val sftpPass = stringPreferencesKey("sftp_pass")
+        val sftpHostKey = stringPreferencesKey("sftp_hostkey")
         val themeMode = stringPreferencesKey("theme_mode")
         fun apiKey(p: Provider) = stringPreferencesKey("api_key_${p.name}")
     }
@@ -66,6 +71,11 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
             panelUrl = p[Keys.panelUrl].orEmpty(),
             pteroApiKey = SecretBox.decrypt(p[Keys.pteroKey].orEmpty()),
             serverAgentMode = AgentMode.entries.firstOrNull { it.name == p[Keys.serverMode] } ?: AgentMode.OFF,
+            sftpHost = p[Keys.sftpHost].orEmpty(),
+            sftpPort = p[Keys.sftpPort]?.toIntOrNull() ?: 2022,
+            sftpUser = p[Keys.sftpUser].orEmpty(),
+            sftpPassword = SecretBox.decrypt(p[Keys.sftpPass].orEmpty()),
+            sftpHostKey = p[Keys.sftpHostKey].orEmpty(),
             themeMode = ThemeMode.entries.firstOrNull { it.name == p[Keys.themeMode] } ?: ThemeMode.SYSTEM,
         )
     }
@@ -88,6 +98,11 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
             p[Keys.panelUrl] = s.panelUrl.trim()
             p[Keys.pteroKey] = SecretBox.encrypt(s.pteroApiKey.trim())
             p[Keys.serverMode] = s.serverAgentMode.name
+            p[Keys.sftpHost] = s.sftpHost.trim()
+            p[Keys.sftpPort] = s.sftpPort.toString()
+            p[Keys.sftpUser] = s.sftpUser.trim()
+            p[Keys.sftpPass] = SecretBox.encrypt(s.sftpPassword)
+            p[Keys.sftpHostKey] = s.sftpHostKey
             p[Keys.themeMode] = s.themeMode.name
             Provider.entries.forEach { prov ->
                 p[Keys.apiKey(prov)] = SecretBox.encrypt(s.apiKeys[prov].orEmpty().trim())

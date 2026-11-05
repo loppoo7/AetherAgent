@@ -1,5 +1,7 @@
 package com.aether.agent.presentation.ui.settings
 
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import com.aether.agent.presentation.ui.theme.AetherMono
 
 import androidx.compose.foundation.BorderStroke
@@ -72,6 +74,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     var draft by remember(current) { mutableStateOf(current) }
     var showKey by remember { mutableStateOf(false) }
     var showPteroKey by remember { mutableStateOf(false) }
+    var showSftpPass by remember { mutableStateOf(false) }
     var showRepoPicker by remember { mutableStateOf(false) }
     val palette = LocalAetherPalette.current
 
@@ -215,7 +218,68 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             }
         }
 
-        Section("Server Pterodactyl") {
+        Section("Server") {
+            Text("File lewat SFTP", style = MaterialTheme.typography.labelMedium, color = palette.muted)
+            OutlinedTextField(
+                value = draft.sftpHost,
+                onValueChange = { draft = draft.copy(sftpHost = it.trim()) },
+                label = { Text("Host SFTP (alamat node)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = if (draft.sftpPort == 0) "" else draft.sftpPort.toString(),
+                    onValueChange = { v -> draft = draft.copy(sftpPort = v.filter { it.isDigit() }.toIntOrNull() ?: 0) },
+                    label = { Text("Port") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(0.4f),
+                )
+                OutlinedTextField(
+                    value = draft.sftpUser,
+                    onValueChange = { draft = draft.copy(sftpUser = it.trim()) },
+                    label = { Text("Username panel") },
+                    singleLine = true,
+                    modifier = Modifier.weight(0.6f),
+                )
+            }
+            OutlinedTextField(
+                value = draft.sftpPassword,
+                onValueChange = { draft = draft.copy(sftpPassword = it) },
+                label = { Text("Password SFTP (password akun panel)") },
+                singleLine = true,
+                visualTransformation = if (showSftpPass) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconAction(
+                        icon = if (showSftpPass) AetherIcon.EyeOff else AetherIcon.Eye,
+                        description = if (showSftpPass) "Sembunyikan password" else "Tampilkan password",
+                        onClick = { showSftpPass = !showSftpPass },
+                        tint = palette.muted,
+                        boxSize = 40.dp,
+                        iconSize = 20.dp,
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Fingerprint server", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        if (draft.sftpHostKey.isBlank()) "Belum dikenali. Dicatat saat pertama konek." else draft.sftpHostKey,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.muted,
+                        maxLines = 2,
+                    )
+                }
+                TextButton(onClick = { draft = draft.copy(sftpHostKey = "") }) { Text("Lupakan") }
+            }
+            Text(
+                "Login SFTP memakai username.idserver secara otomatis, jadi satu akun panel berlaku untuk semua server.",
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.muted,
+            )
+            Text("Restart server (Client API panel)", style = MaterialTheme.typography.labelMedium, color = palette.muted)
             OutlinedTextField(
                 value = draft.panelUrl,
                 onValueChange = { draft = draft.copy(panelUrl = it) },
@@ -240,11 +304,6 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                "Buat API key di panel: Account lalu API Credentials. Key ini memberi akses ke server milikmu.",
-                style = MaterialTheme.typography.bodySmall,
-                color = palette.muted,
             )
         }
 

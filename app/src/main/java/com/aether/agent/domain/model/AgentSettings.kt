@@ -40,6 +40,12 @@ data class AgentSettings(
     val panelUrl: String = "",
     val pteroApiKey: String = "",
     val serverAgentMode: AgentMode = AgentMode.OFF,
+    val sftpHost: String = "",
+    val sftpPort: Int = 2022,
+    val sftpUser: String = "",
+    val sftpPassword: String = "",
+    /** Fingerprint host SFTP yang sudah dikenali. Kosong berarti belum pernah konek. */
+    val sftpHostKey: String = "",
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
 ) {
     val apiKey: String get() = apiKeys[provider].orEmpty()

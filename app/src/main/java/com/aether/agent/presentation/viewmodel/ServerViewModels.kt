@@ -1,5 +1,6 @@
 package com.aether.agent.presentation.viewmodel
 
+import com.aether.agent.domain.repository.SftpGateway
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -86,7 +87,7 @@ class ServerListViewModel @Inject constructor(
 /** Pengelola file satu server. Argumen navigasi: server, name. */
 @HiltViewModel
 class FileManagerViewModel @Inject constructor(
-    private val ptero: PterodactylGateway,
+    private val sftp: SftpGateway,
     savedState: SavedStateHandle,
 ) : ViewModel() {
 
@@ -112,7 +113,7 @@ class FileManagerViewModel @Inject constructor(
         _state.value = _state.value.copy(dir = dir, loading = true, error = null)
         viewModelScope.launch {
             try {
-                _state.value = _state.value.copy(loading = false, files = ptero.listFiles(serverId, dir))
+                _state.value = _state.value.copy(loading = false, files = sftp.listFiles(serverId, dir))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -133,17 +134,17 @@ class FileManagerViewModel @Inject constructor(
     fun pathOf(name: String): String = join(_state.value.dir, name)
 
     fun createFolder(name: String) = runAction("Folder dibuat") {
-        ptero.createFolder(serverId, _state.value.dir, name.trim())
+        sftp.createFolder(serverId, _state.value.dir, name.trim())
         open(_state.value.dir)
     }
 
     fun rename(from: String, to: String) = runAction("Nama diubah") {
-        ptero.rename(serverId, _state.value.dir, from, to.trim())
+        sftp.rename(serverId, _state.value.dir, from, to.trim())
         open(_state.value.dir)
     }
 
     fun delete(names: List<String>) = runAction("Dihapus") {
-        ptero.deletePaths(serverId, _state.value.dir, names)
+        sftp.deletePaths(serverId, _state.value.dir, names)
         open(_state.value.dir)
     }
 
@@ -173,6 +174,7 @@ class FileManagerViewModel @Inject constructor(
 @HiltViewModel
 class FileEditorViewModel @Inject constructor(
     private val ptero: PterodactylGateway,
+    private val sftp: SftpGateway,
     savedState: SavedStateHandle,
 ) : ViewModel() {
 
@@ -200,7 +202,7 @@ class FileEditorViewModel @Inject constructor(
     private fun load() {
         viewModelScope.launch {
             try {
-                val content = ptero.readFile(serverId, path)
+                val content = sftp.readFile(serverId, path)
                 if (content.length > MAX_CHARS) {
                     throw IllegalStateException("File terlalu besar untuk diedit di HP (di atas 1 MB).")
                 }
@@ -224,7 +226,7 @@ class FileEditorViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val text = _state.value.text
-                ptero.writeFile(serverId, path, text)
+                sftp.writeFile(serverId, path, text)
                 if (restart) ptero.power(serverId, "restart")
                 _state.value = _state.value.copy(
                     original = text,
