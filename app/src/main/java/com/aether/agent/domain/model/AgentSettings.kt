@@ -31,6 +31,8 @@ data class AgentSettings(
     val githubAvatarUrl: String = "",
     val githubOwner: String = "",
     val githubRepo: String = "",
+    /** Multi-repository targets encoded as owner/name|branch. */
+    val githubTargets: Set<String> = emptySet(),
     val githubBranch: String = "ai-changes",
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
     val confirmWrites: Boolean = true,
