@@ -13,6 +13,8 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.HttpHeaders
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import io.ktor.http.Parameters
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,6 +30,7 @@ class GithubAuthGatewayImpl @Inject constructor(private val http: HttpClient) : 
     override suspend fun requestDeviceCode(clientId: String): DeviceCode = readableErrors {
         val o: JsonObject = http.post("https://github.com/login/device/code") {
             header(HttpHeaders.Accept, "application/json")
+            contentType(ContentType.Application.FormUrlEncoded)
             setBody(FormDataContent(Parameters.build {
                 append("client_id", clientId)
                 append("scope", "repo workflow")
@@ -48,6 +51,7 @@ class GithubAuthGatewayImpl @Inject constructor(private val http: HttpClient) : 
     override suspend fun pollToken(clientId: String, deviceCode: String): PollResult = readableErrors {
         val o: JsonObject = http.post("https://github.com/login/oauth/access_token") {
             header(HttpHeaders.Accept, "application/json")
+            contentType(ContentType.Application.FormUrlEncoded)
             setBody(FormDataContent(Parameters.build {
                 append("client_id", clientId)
                 append("device_code", deviceCode)
@@ -67,6 +71,7 @@ class GithubAuthGatewayImpl @Inject constructor(private val http: HttpClient) : 
     override suspend fun fetchUser(token: String): GithubUser = readableErrors {
         val o: JsonObject = http.get("https://api.github.com/user") {
             header(HttpHeaders.Accept, "application/vnd.github+json")
+            header("User-Agent", "AetherAgent-Android")
             header("X-GitHub-Api-Version", "2022-11-28")
             header(HttpHeaders.Authorization, "Bearer $token")
         }.body()
