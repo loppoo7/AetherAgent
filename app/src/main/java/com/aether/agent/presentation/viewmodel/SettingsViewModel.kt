@@ -10,6 +10,7 @@ import com.aether.agent.domain.usecase.UpdateSettingsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,7 +36,15 @@ class SettingsViewModel @Inject constructor(
     fun connectGithub() {
         loginJob?.cancel()
         loginJob = viewModelScope.launch {
-            connectGithubUseCase().collect { _login.value = it }
+            try {
+                connectGithubUseCase().collect { _login.value = it }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _login.value = GithubLoginState.Failed(
+                    e.message ?: "Koneksi GitHub gagal. Periksa jaringan dan pengaturan OAuth Device Flow.",
+                )
+            }
         }
     }
 
