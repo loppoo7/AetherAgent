@@ -37,8 +37,9 @@ class ContextPickerViewModel @Inject constructor(private val github: GithubGatew
         _state.value = ContextPickerState(loading = true)
         viewModelScope.launch {
             try {
-                val rows = targets.sorted().flatMap { target ->
-                    github.listFiles(target).map { ContextFileOption(target, it) }
+                val rows = mutableListOf<ContextFileOption>()
+                for (target in targets.sorted()) {
+                    for (path in github.listFiles(target)) rows += ContextFileOption(target, path)
                 }
                 _state.value = _state.value.copy(loading = false, files = rows)
             } catch (e: CancellationException) {
@@ -62,11 +63,14 @@ class ContextPickerViewModel @Inject constructor(private val github: GithubGatew
         require(snapshot.selected.isNotEmpty()) { "Pilih minimal satu file." }
         _state.value = snapshot.copy(reading = true, error = null)
         return try {
-            snapshot.files.filter { it.id in snapshot.selected }.take(20).map { file ->
+            val attached = mutableListOf<AttachedFileContext>()
+            for (file in snapshot.files.filter { it.id in snapshot.selected }.take(20)) {
                 val content = github.readFile(file.repositoryTarget, file.path)
                     ?: error("File ${file.path} tidak ditemukan di ${file.repository}.")
-                AttachedFileContext(file.repository, file.path, content.take(12_000))
-            }.also { _state.value = _state.value.copy(reading = false) }
+                attached += AttachedFileContext(file.repository, file.path, content.take(12_000))
+            }
+            _state.value = _state.value.copy(reading = false)
+            attached
         } catch (e: Exception) {
             _state.value = _state.value.copy(reading = false, error = e.message ?: "Gagal membaca file.")
             throw e
