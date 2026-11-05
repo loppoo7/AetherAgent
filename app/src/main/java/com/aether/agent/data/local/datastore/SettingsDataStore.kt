@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.aether.agent.data.security.SecretBox
 import com.aether.agent.domain.model.AgentSettings
@@ -32,6 +33,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         val githubAvatar = stringPreferencesKey("github_avatar")
         val githubOwner = stringPreferencesKey("github_owner")
         val githubRepo = stringPreferencesKey("github_repo")
+        val githubTargets = stringSetPreferencesKey("github_targets")
         val githubBranch = stringPreferencesKey("github_branch")
         val systemPrompt = stringPreferencesKey("system_prompt")
         val confirmWrites = booleanPreferencesKey("confirm_writes")
@@ -51,6 +53,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
             githubAvatarUrl = p[Keys.githubAvatar].orEmpty(),
             githubOwner = p[Keys.githubOwner].orEmpty(),
             githubRepo = p[Keys.githubRepo].orEmpty(),
+            githubTargets = p[Keys.githubTargets].orEmpty(),
             githubBranch = p[Keys.githubBranch].takeUnless { it.isNullOrBlank() } ?: "ai-changes",
             systemPrompt = p[Keys.systemPrompt] ?: DEFAULT_SYSTEM_PROMPT,
             confirmWrites = p[Keys.confirmWrites] ?: true,
@@ -68,6 +71,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
             p[Keys.githubAvatar] = s.githubAvatarUrl
             p[Keys.githubOwner] = s.githubOwner.trim()
             p[Keys.githubRepo] = s.githubRepo.trim()
+            p[Keys.githubTargets] = s.githubTargets
             p[Keys.githubBranch] = s.githubBranch.trim().ifBlank { "ai-changes" }
             p[Keys.systemPrompt] = s.systemPrompt
             p[Keys.confirmWrites] = s.confirmWrites
