@@ -47,4 +47,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1"); implementation(libs.androidx.room.runtime); implementation(libs.androidx.room.ktx)
     ksp("androidx.room:room-compiler:2.6.1")
     implementation(libs.markdown.renderer)
+
+    // Android binding for SLF4J 1.7, required by LoggerFactory's StaticLoggerBinder lookup.
+    implementation("org.slf4j:slf4j-android:1.7.36")
 }
