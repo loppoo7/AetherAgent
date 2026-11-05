@@ -31,7 +31,26 @@ Butuh JDK 17, Android SDK 35, dan Gradle 8.9.
 ./gradlew assembleDebug
 ```
 
-Workflow di `.github/workflows/build-apk.yml` membuat APK debug di setiap push. APK release ditandatangani jika secret keystore tersedia.
+Workflow di `.github/workflows/build-apk.yml` membuat APK debug untuk pengembangan dan APK **release bertanda tangan permanen** untuk instalasi/update dari branch `main`. APK release hanya dibuat setelah empat GitHub Actions Secrets signing dikonfigurasi.
+
+### Instalasi dan update tanpa uninstall
+
+- Gunakan hanya artifact `AetherAgent-update-vN` (APK release) untuk pemakaian normal. Artifact debug bersifat pengembangan dan memakai application ID berbeda (`com.aether.agent.debug`).
+- Application ID release dipertahankan sebagai `com.aether.agent`; jangan menggantinya setelah rilis pertama.
+- `versionCode` diambil otomatis dari nomor workflow run agar selalu meningkat.
+- Semua APK release harus ditandatangani dengan keystore dan alias yang sama. Jangan membuat atau mengganti keystore untuk build berikutnya.
+- Jika sebelumnya memasang APK debug, Android menganggap APK release sebagai aplikasi berbeda. Migrasi ke release memerlukan pemasangan pertama secara terpisah; setelah itu update release berikutnya cukup install di atas versi lama tanpa menghapus data.
+- Simpan keystore dan password secara offline. Kehilangan signing key akan memutus kemampuan update untuk instalasi yang sudah memakai key tersebut.
+
+#### Menambahkan signing secrets (sekali saja)
+
+Buka **Settings → Secrets and variables → Actions → New repository secret** pada GitHub, lalu buat:
+- `KEYSTORE_BASE64`: isi lengkap Base64 dari file keystore yang disediakan.
+- `KEYSTORE_PASSWORD`: password keystore.
+- `KEY_ALIAS`: alias key.
+- `KEY_PASSWORD`: password key.
+
+Jangan pernah memasukkan keystore atau password ke repository.
 
 ## Konfigurasi
 

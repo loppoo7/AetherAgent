@@ -9,7 +9,13 @@ plugins {
 android {
     namespace = "com.aether.agent"
     compileSdk = 35
-    defaultConfig { applicationId = "com.aether.agent"; minSdk = 26; targetSdk = 35; versionCode = 1; versionName = "0.1.0" }
+    defaultConfig {
+        applicationId = "com.aether.agent"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull()?.coerceAtLeast(1) ?: 1
+        versionName = "0.1.$versionCode"
+    }
     signingConfigs { create("release") {
         System.getenv("KEYSTORE_PATH")?.let { storeFile = file(it) }
         storePassword = System.getenv("KEYSTORE_PASSWORD"); keyAlias = System.getenv("KEY_ALIAS"); keyPassword = System.getenv("KEY_PASSWORD")
@@ -19,7 +25,7 @@ android {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = if (System.getenv("KEYSTORE_PATH") != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
