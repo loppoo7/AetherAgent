@@ -56,7 +56,7 @@ class AgentRunner @Inject constructor(
                         emit(AgentEvent.ActionFinished(call.id, title, "Ditolak pengguna.", ActionStatus.REJECTED))
                         messages += LlmMessage.ToolResult(
                             call.id, call.name,
-                            "Pengguna menolak aksi ini. Jangan ulangi tanpa instruksi baru.",
+                            "Pengguna meminta revisi terhadap diff ini. Jangan jalankan perubahan yang ditolak. Perbaiki usulan berdasarkan konteks yang tersedia lalu tampilkan diff baru untuk persetujuan.",
                         )
                         continue
                     }
