@@ -182,8 +182,15 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             }
             OutlinedTextField(
                 value = draft.githubBranch,
-                onValueChange = { draft = draft.copy(githubBranch = it) },
-                label = { Text("Branch kerja (disarankan bukan main)") },
+                onValueChange = { branch ->
+                    draft = draft.copy(
+                        githubBranch = branch,
+                        githubTargets = draft.githubTargets.map { target ->
+                            target.substringBefore('|') + "|" + branch
+                        }.toSet(),
+                    )
+                },
+                label = { Text("Branch kerja untuk semua repo (harus sudah ada)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
