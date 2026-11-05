@@ -150,11 +150,12 @@ private fun DrawScope.drawAetherIcon(icon: AetherIcon, tint: Color, s: Float, sw
             line(16f, 16f, 21f, 21f)
         }
         AetherIcon.Refresh -> {
+            // Lingkaran hampir penuh dari kanan, lalu panah di ujungnya (gaya ikon refresh standar).
             drawArc(
-                color = tint, startAngle = -90f, sweepAngle = 270f, useCenter = false,
-                topLeft = p(5f, 5f), size = Size(14f * s, 14f * s), style = stroke,
+                color = tint, startAngle = 0f, sweepAngle = 315f, useCenter = false,
+                topLeft = p(4f, 4f), size = Size(16f * s, 16f * s), style = stroke,
             )
-            poly(16f, 4f, 19f, 7f, 16f, 10f)
+            poly(20f, 4f, 20f, 9f, 15f, 9f)
         }
         AetherIcon.Power -> {
             drawArc(
