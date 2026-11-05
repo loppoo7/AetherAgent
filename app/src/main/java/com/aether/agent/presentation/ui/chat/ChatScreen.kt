@@ -239,8 +239,10 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
                     }
                 } + settings.model).distinct(),
                 role = selectedRole,
+                roleSelectorEnabled = settings.roleSelectorEnabled,
                 onModelSelected = viewModel::selectModel,
                 onRoleSelected = viewModel::selectRole,
+                onRoleSelectorEnabledChange = viewModel::setRoleSelectorEnabled,
                 attachedContext = attachedContext,
                 onRemoveContext = viewModel::removeContext,
             )

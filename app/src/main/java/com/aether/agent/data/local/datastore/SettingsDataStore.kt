@@ -37,6 +37,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         val githubBranch = stringPreferencesKey("github_branch")
         val systemPrompt = stringPreferencesKey("system_prompt")
         val confirmWrites = booleanPreferencesKey("confirm_writes")
+        val roleSelectorEnabled = booleanPreferencesKey("role_selector_enabled")
         val themeMode = stringPreferencesKey("theme_mode")
         fun apiKey(p: Provider) = stringPreferencesKey("api_key_${p.name}")
     }
@@ -57,6 +58,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
             githubBranch = p[Keys.githubBranch].takeUnless { it.isNullOrBlank() } ?: "ai-changes",
             systemPrompt = p[Keys.systemPrompt] ?: DEFAULT_SYSTEM_PROMPT,
             confirmWrites = p[Keys.confirmWrites] ?: true,
+            roleSelectorEnabled = p[Keys.roleSelectorEnabled] ?: true,
             themeMode = ThemeMode.entries.firstOrNull { it.name == p[Keys.themeMode] } ?: ThemeMode.SYSTEM,
         )
     }
@@ -75,6 +77,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
             p[Keys.githubBranch] = s.githubBranch.trim().ifBlank { "ai-changes" }
             p[Keys.systemPrompt] = s.systemPrompt
             p[Keys.confirmWrites] = s.confirmWrites
+            p[Keys.roleSelectorEnabled] = s.roleSelectorEnabled
             p[Keys.themeMode] = s.themeMode.name
             Provider.entries.forEach { prov ->
                 p[Keys.apiKey(prov)] = SecretBox.encrypt(s.apiKeys[prov].orEmpty().trim())

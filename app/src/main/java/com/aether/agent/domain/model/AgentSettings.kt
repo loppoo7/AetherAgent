@@ -36,6 +36,7 @@ data class AgentSettings(
     val githubBranch: String = "ai-changes",
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
     val confirmWrites: Boolean = true,
+    val roleSelectorEnabled: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
 ) {
     val apiKey: String get() = apiKeys[provider].orEmpty()

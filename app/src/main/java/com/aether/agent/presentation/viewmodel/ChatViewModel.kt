@@ -80,6 +80,13 @@ class ChatViewModel @Inject constructor(
 
     fun selectRole(role: AiRole) { _selectedRole.value = role }
 
+    fun setRoleSelectorEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = settingsRepository.observeSettings().first()
+            updateSettings(current.copy(roleSelectorEnabled = enabled))
+        }
+    }
+
     fun selectModel(model: String) {
         if (model.isBlank()) return
         viewModelScope.launch {
@@ -97,7 +104,7 @@ class ChatViewModel @Inject constructor(
         val id = _activeId.value
         if (text.isBlank() || _running.value || id.isEmpty()) return
         val contextSnapshot = _attachedContext.value
-        val roleInstruction = _selectedRole.value.instruction
+        val roleInstruction = if (settings.value.roleSelectorEnabled) _selectedRole.value.instruction else ""
         _running.value = true
         _error.value = null
         _cards.value = emptyList()
