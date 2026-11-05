@@ -95,10 +95,13 @@ class GithubGatewayImpl @Inject constructor(
     override suspend fun readFileAcrossTargets(path: String): String = readableErrors {
         val s = currentSettings()
         val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
-        targets.sorted().joinToString("\n\n") { target ->
-            "===== ${target.substringBefore('|')} · $path =====\n" +
-                (readFile(target, path) ?: "(file tidak ditemukan)")
+        val sections = mutableListOf<String>()
+        for (target in targets.sorted()) {
+            val label = target.substringBefore('|')
+            val content = readFile(target, path) ?: "(file tidak ditemukan)"
+            sections += "===== $label · $path =====\n$content"
         }
+        sections.joinToString("\n\n")
     }
 
     override suspend fun writeFile(path: String, content: String, message: String): String = readableErrors {
