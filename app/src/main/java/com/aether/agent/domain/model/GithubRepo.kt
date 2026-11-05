@@ -9,3 +9,5 @@ data class GithubRepo(
     /** false jika akun hanya punya akses baca. */
     val canPush: Boolean,
 )
+
+fun GithubRepo.toTargetKey(): String = "$owner/$name|$defaultBranch"
