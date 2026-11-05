@@ -401,8 +401,10 @@ private fun InputBar(
     model: String,
     modelChoices: List<String>,
     role: AiRole,
+    roleSelectorEnabled: Boolean,
     onModelSelected: (String) -> Unit,
     onRoleSelected: (AiRole) -> Unit,
+    onRoleSelectorEnabledChange: (Boolean) -> Unit,
     attachedContext: List<AttachedFileContext>,
     onRemoveContext: (String) -> Unit,
 ) {
@@ -424,8 +426,10 @@ private fun InputBar(
                 model = model,
                 modelChoices = modelChoices,
                 role = role,
+                roleSelectorEnabled = roleSelectorEnabled,
                 onModelSelected = onModelSelected,
                 onRoleSelected = onRoleSelected,
+                onRoleSelectorEnabledChange = onRoleSelectorEnabledChange,
             )
             if (attachedContext.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
