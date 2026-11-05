@@ -76,9 +76,19 @@ class GithubGatewayImpl @Inject constructor(
             if (o["type"]?.jsonPrimitive?.content == "blob") o["path"]?.jsonPrimitive?.content else null
         }
 
-    override suspend fun listFiles(): List<String> = readableErrors { treeFiles(config()) }
+    override suspend fun listFiles(): List<String> = readableErrors {
+        val s = currentSettings()
+        val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
+        targets.sorted().flatMap { target ->
+            val label = target.substringBefore('|')
+            treeFiles(configForTarget(target)).map { "$label/$it" }
+        }
+    }
     override suspend fun listFiles(repoTarget: String): List<String> = readableErrors { treeFiles(configForTarget(repoTarget)) }
-    override suspend fun readFile(path: String): String? = readableErrors { decodeFile(client.file(config(), path)) }
+    override suspend fun readFile(path: String): String? = readableErrors {
+        val s = currentSettings()
+        if (s.githubTargets.size > 1) readFileAcrossTargets(path) else decodeFile(client.file(config(), path))
+    }
     override suspend fun readFile(repoTarget: String, path: String): String? =
         readableErrors { decodeFile(client.file(configForTarget(repoTarget), path)) }
 
