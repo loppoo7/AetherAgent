@@ -55,6 +55,7 @@ import com.aether.agent.domain.model.AgentSettings
 import com.aether.agent.domain.model.AnswerStyle
 import com.aether.agent.domain.model.Provider
 import com.aether.agent.domain.model.ThemeMode
+import com.aether.agent.domain.model.toTargetKey
 import com.aether.agent.domain.usecase.GithubLoginState
 import com.aether.agent.presentation.components.AetherIcon
 import com.aether.agent.presentation.components.IconAction
@@ -167,32 +168,18 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             )
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Repo kerja", style = MaterialTheme.typography.labelMedium, color = palette.muted)
-                    Text(
-                        if (draft.githubOwner.isNotBlank() && draft.githubRepo.isNotBlank()) {
-                            "${draft.githubOwner}/${draft.githubRepo}"
-                        } else {
-                            "Belum dipilih"
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
+                    Text("Repository target", style = MaterialTheme.typography.labelMedium, color = palette.muted)
+                    val targets = draft.githubTargets.ifEmpty {
+                        if (draft.githubOwner.isNotBlank() && draft.githubRepo.isNotBlank())
+                            setOf("${draft.githubOwner}/${draft.githubRepo}|${draft.githubBranch}") else emptySet()
+                    }
+                    Text(if (targets.isNotEmpty()) "${targets.size} repository dipilih" else "Belum dipilih", style = MaterialTheme.typography.bodyLarge)
+                    targets.sorted().forEach { target ->
+                        Text(target.substringBefore('|'), style = MaterialTheme.typography.bodySmall, color = palette.muted)
+                    }
                 }
                 Button(onClick = { showRepoPicker = true }) { Text("Pilih repo") }
             }
-            OutlinedTextField(
-                value = draft.githubOwner,
-                onValueChange = { draft = draft.copy(githubOwner = it) },
-                label = { Text("Owner (username/org)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = draft.githubRepo,
-                onValueChange = { draft = draft.copy(githubRepo = it) },
-                label = { Text("Nama repo") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
             OutlinedTextField(
                 value = draft.githubBranch,
                 onValueChange = { draft = draft.copy(githubBranch = it) },
@@ -236,14 +223,18 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 
     if (showRepoPicker) {
         RepoPickerDialog(
-            selectedOwner = draft.githubOwner,
-            selectedRepo = draft.githubRepo,
+            selectedRepos = draft.githubTargets.ifEmpty {
+                if (draft.githubOwner.isNotBlank() && draft.githubRepo.isNotBlank())
+                    setOf("${draft.githubOwner}/${draft.githubRepo}|${draft.githubBranch}") else emptySet()
+            },
             onDismiss = { showRepoPicker = false },
-            onPick = { repo ->
+            onConfirm = { repos ->
+                val first = repos.firstOrNull()
                 draft = draft.copy(
-                    githubOwner = repo.owner,
-                    githubRepo = repo.name,
-                    githubBranch = repo.defaultBranch,
+                    githubOwner = first?.owner.orEmpty(),
+                    githubRepo = first?.name.orEmpty(),
+                    githubBranch = first?.defaultBranch ?: draft.githubBranch,
+                    githubTargets = repos.map { it.toTargetKey() }.toSet(),
                 )
                 showRepoPicker = false
             },
