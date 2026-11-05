@@ -43,7 +43,7 @@ class WriteFileTool @Inject constructor(private val github: GithubGateway) : Age
     override val requiresApproval = true
     override fun describe(args: JsonObject) = "Menulis ${args.str("path")}"
     override suspend fun preview(args: JsonObject): String =
-        LineDiff.unified(github.readFile(args.str("path")).orEmpty(), args.str("content"))
+        LineDiff.unified(github.readFileAcrossTargets(args.str("path")), args.str("content"))
     override suspend fun execute(args: JsonObject): String {
         val path = args.str("path")
         val message = args.str("message").ifBlank { "Update $path" }
@@ -61,7 +61,7 @@ class DeleteFileTool @Inject constructor(private val github: GithubGateway) : Ag
     override val requiresApproval = true
     override fun describe(args: JsonObject) = "Menghapus ${args.str("path")}"
     override suspend fun preview(args: JsonObject): String =
-        LineDiff.unified(github.readFile(args.str("path")).orEmpty(), "")
+        LineDiff.unified(github.readFileAcrossTargets(args.str("path")), "")
     override suspend fun execute(args: JsonObject): String =
         github.deleteFile(args.str("path"), args.str("message").ifBlank { "Hapus ${args.str("path")}" })
 }
