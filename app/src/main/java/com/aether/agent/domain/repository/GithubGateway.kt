@@ -6,6 +6,9 @@ interface GithubGateway {
     suspend fun listRepos(): List<GithubRepo>
     suspend fun listFiles(): List<String>
     suspend fun readFile(path: String): String?
+    suspend fun listFiles(repoTarget: String): List<String>
+    suspend fun readFile(repoTarget: String, path: String): String?
+    suspend fun readFileAcrossTargets(path: String): String
     suspend fun writeFile(path: String, content: String, message: String): String
     suspend fun deleteFile(path: String, message: String): String
     suspend fun createBranch(name: String, from: String): String
