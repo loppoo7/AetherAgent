@@ -33,6 +33,7 @@ class GithubClient @Inject constructor(private val http: HttpClient) {
 
     private fun HttpRequestBuilder.github(token: String) {
         header(HttpHeaders.Accept, "application/vnd.github+json")
+        header("User-Agent", "AetherAgent-Android")
         header("X-GitHub-Api-Version", "2022-11-28")
         if (token.isNotBlank()) header(HttpHeaders.Authorization, "Bearer $token")
     }
