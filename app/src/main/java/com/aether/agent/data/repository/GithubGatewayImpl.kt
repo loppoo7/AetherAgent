@@ -82,9 +82,8 @@ class GithubGatewayImpl @Inject constructor(
         val allFiles = mutableListOf<String>()
         for (target in targets.sorted()) {
             val label = target.substringBefore('|')
-            for (filePath in treeFiles(configForTarget(target))) {
-                allFiles += "$label/$filePath"
-            }
+            allFiles += "## $label"
+            allFiles += treeFiles(configForTarget(target))
         }
         allFiles
     }
