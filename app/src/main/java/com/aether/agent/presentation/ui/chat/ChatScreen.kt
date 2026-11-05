@@ -58,6 +58,8 @@ import com.aether.agent.presentation.components.AgentActionCard
 import com.aether.agent.presentation.components.AppDrawer
 import com.aether.agent.presentation.components.ApprovalDialog
 import com.aether.agent.presentation.components.ChatBubble
+import com.aether.agent.presentation.components.ChatModelRoleSelector
+import com.aether.agent.presentation.components.MultiFileContextPickerDialog
 import com.aether.agent.presentation.components.IconAction
 import com.aether.agent.presentation.components.RepoPickerDialog
 import com.aether.agent.presentation.components.ThinkingIndicator
@@ -65,6 +67,8 @@ import com.aether.agent.presentation.ui.theme.LocalAetherPalette
 import com.aether.agent.presentation.ui.theme.Terracotta
 import com.aether.agent.presentation.viewmodel.CardState
 import com.aether.agent.presentation.viewmodel.ChatViewModel
+import com.aether.agent.domain.model.AiRole
+import com.aether.agent.domain.model.AttachedFileContext
 import java.time.LocalTime
 import kotlinx.coroutines.launch
 
@@ -122,6 +126,8 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
     val error by viewModel.error.collectAsState()
     val approval by viewModel.approval.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    val selectedRole by viewModel.selectedRole.collectAsState()
+    val attachedContext by viewModel.attachedContext.collectAsState()
 
     val listState = rememberLazyListState()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -129,15 +135,16 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
     var input by rememberSaveable { mutableStateOf("") }
     val picks = remember(activeId) { pickSuggestions() }
     var showRepoPicker by remember { mutableStateOf(false) }
-    val repoSet = settings.githubOwner.isNotBlank() && settings.githubRepo.isNotBlank()
+    var showContextPicker by remember { mutableStateOf(false) }
+    val repoTargets = settings.githubTargets.ifEmpty {
+        if (settings.githubOwner.isNotBlank() && settings.githubRepo.isNotBlank())
+            setOf("${settings.githubOwner}/${settings.githubRepo}|${settings.githubBranch}") else emptySet()
+    }
+    val repoSet = repoTargets.isNotEmpty()
 
     val status = cards.lastOrNull { it.state == CardState.RUNNING }?.title
     val title = sessions.firstOrNull { it.id == activeId }?.title ?: "AetherAgent"
-    val subtitle = if (settings.githubOwner.isNotBlank() && settings.githubRepo.isNotBlank()) {
-        "${settings.githubOwner}/${settings.githubRepo} · ${settings.githubBranch}"
-    } else {
-        "Pilih repo"
-    }
+    val subtitle = if (repoTargets.isNotEmpty()) "${repoTargets.size} repo dipilih" else "Pilih repo"
 
     BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
 
@@ -220,7 +227,22 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
                     input = ""
                 },
                 onStop = viewModel::stop,
-                onAttach = { /* Lampiran file/repo belum diimplementasikan. */ },
+                onAttach = { showContextPicker = true },
+                providerLabel = settings.provider.label,
+                model = settings.model,
+                modelChoices = (settings.provider.models.ifEmpty {
+                    when (settings.provider.name) {
+                        "OPENAI" -> listOf("gpt-4o", "gpt-4o-mini", "gpt-4.1", "o3-mini")
+                        "ANTHROPIC" -> listOf("claude-3-7-sonnet-latest", "claude-3-5-sonnet-latest", "claude-3-5-haiku-latest")
+                        "DEEPSEEK" -> listOf("deepseek-chat", "deepseek-reasoner")
+                        else -> listOf(settings.model)
+                    }
+                } + settings.model).distinct(),
+                role = selectedRole,
+                onModelSelected = viewModel::selectModel,
+                onRoleSelected = viewModel::selectRole,
+                attachedContext = attachedContext,
+                onRemoveContext = viewModel::removeContext,
             )
         }
     }
@@ -231,13 +253,19 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
 
     if (showRepoPicker) {
         RepoPickerDialog(
-            selectedOwner = settings.githubOwner,
-            selectedRepo = settings.githubRepo,
+            selectedRepos = repoTargets,
             onDismiss = { showRepoPicker = false },
-            onPick = { repo ->
-                viewModel.selectRepo(repo)
+            onConfirm = { repos ->
+                viewModel.selectRepos(repos)
                 showRepoPicker = false
             },
+        )
+    }
+    if (showContextPicker) {
+        MultiFileContextPickerDialog(
+            targets = repoTargets,
+            onDismiss = { showContextPicker = false },
+            onAttach = viewModel::attachContext,
         )
     }
 }
@@ -367,6 +395,14 @@ private fun InputBar(
     onSend: () -> Unit,
     onStop: () -> Unit,
     onAttach: () -> Unit,
+    providerLabel: String,
+    model: String,
+    modelChoices: List<String>,
+    role: AiRole,
+    onModelSelected: (String) -> Unit,
+    onRoleSelected: (AiRole) -> Unit,
+    attachedContext: List<AttachedFileContext>,
+    onRemoveContext: (String) -> Unit,
 ) {
     val palette = LocalAetherPalette.current
     Surface(
@@ -381,6 +417,29 @@ private fun InputBar(
         shadowElevation = 2.dp,
     ) {
         Column(Modifier.padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 8.dp)) {
+            ChatModelRoleSelector(
+                providerLabel = providerLabel,
+                model = model,
+                modelChoices = modelChoices,
+                role = role,
+                onModelSelected = onModelSelected,
+                onRoleSelected = onRoleSelected,
+            )
+            if (attachedContext.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    attachedContext.forEach { file ->
+                        Surface(color = palette.userBubble, shape = RoundedCornerShape(10.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            ) {
+                                Text(file.path.substringAfterLast('/'), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                Text(" ×", modifier = Modifier.clickable { onRemoveContext(file.id) }, color = palette.muted)
+                            }
+                        }
+                    }
+                }
+            }
             TextField(
                 value = text,
                 onValueChange = onTextChange,
