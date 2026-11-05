@@ -60,6 +60,7 @@ fun AppDrawer(
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
     onSettings: () -> Unit,
+    onFileServer: () -> Unit = {},
 ) {
     val palette = LocalAetherPalette.current
     ModalDrawerSheet(
@@ -123,6 +124,17 @@ fun AppDrawer(
             }
 
             HorizontalDivider(color = palette.border)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onFileServer)
+                    .padding(horizontal = 22.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AIcon(AetherIcon.Folder, size = 20.dp)
+                Spacer(Modifier.width(14.dp))
+                Text("File Server", style = MaterialTheme.typography.labelLarge)
+            }
             Row(
                 Modifier
                     .fillMaxWidth()

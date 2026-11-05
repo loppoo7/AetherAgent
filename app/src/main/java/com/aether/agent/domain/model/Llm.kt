@@ -4,12 +4,7 @@ import kotlinx.serialization.json.JsonObject
 
 data class ToolSpec(val name: String, val description: String, val parameters: JsonObject)
 
-data class ToolCall(
-    val id: String,
-    val name: String,
-    val arguments: JsonObject,
-    val thoughtSignature: String? = null,
-)
+data class ToolCall(val id: String, val name: String, val arguments: JsonObject)
 
 sealed interface LlmMessage {
     data class User(val text: String) : LlmMessage

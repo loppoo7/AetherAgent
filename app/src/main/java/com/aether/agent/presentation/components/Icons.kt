@@ -34,6 +34,7 @@ import kotlin.math.sin
 enum class AetherIcon {
     Menu, More, Plus, ArrowUp, Stop, Check, Close, Minus,
     ChevronDown, ChevronRight, Back, Copy, Settings, Sparkle, Eye, EyeOff,
+    Folder, FileDoc, Search, Refresh, Power,
 }
 
 @Composable
@@ -131,6 +132,36 @@ private fun DrawScope.drawAetherIcon(icon: AetherIcon, tint: Color, s: Float, sw
             drawPath(path = path, color = tint, style = stroke)
             drawCircle(color = tint, radius = 3f * s, center = p(12f, 12f), style = stroke)
             if (icon == AetherIcon.EyeOff) line(4f, 20f, 20f, 4f)
+        }
+        AetherIcon.Folder -> {
+            val path = Path()
+            path.moveTo(3f * s, 7f * s)
+            path.lineTo(9f * s, 7f * s)
+            path.lineTo(11f * s, 9f * s)
+            path.lineTo(21f * s, 9f * s)
+            path.lineTo(21f * s, 19f * s)
+            path.lineTo(3f * s, 19f * s)
+            path.close()
+            drawPath(path = path, color = tint, style = stroke)
+        }
+        AetherIcon.FileDoc -> poly(6f, 3f, 14f, 3f, 19f, 8f, 19f, 21f, 6f, 21f, 6f, 3f)
+        AetherIcon.Search -> {
+            drawCircle(color = tint, radius = 6.5f * s, center = p(11f, 11f), style = stroke)
+            line(16f, 16f, 21f, 21f)
+        }
+        AetherIcon.Refresh -> {
+            drawArc(
+                color = tint, startAngle = -90f, sweepAngle = 270f, useCenter = false,
+                topLeft = p(5f, 5f), size = Size(14f * s, 14f * s), style = stroke,
+            )
+            poly(16f, 4f, 19f, 7f, 16f, 10f)
+        }
+        AetherIcon.Power -> {
+            drawArc(
+                color = tint, startAngle = -60f, sweepAngle = 300f, useCenter = false,
+                topLeft = p(5f, 5f), size = Size(14f * s, 14f * s), style = stroke,
+            )
+            line(12f, 3f, 12f, 12f)
         }
         AetherIcon.Sparkle -> {
             // Bintang empat sudut milik AetherAgent (bukan logo Anthropic).

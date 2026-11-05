@@ -1,6 +1,6 @@
 package com.aether.agent.domain.model
 
-enum class ApiStyle { OPENAI_COMPAT, ANTHROPIC, GEMINI }
+enum class ApiStyle { OPENAI_COMPAT, ANTHROPIC }
 
 enum class Provider(
     val label: String,
@@ -15,17 +15,11 @@ enum class Provider(
     DEEPSEEK("DeepSeek", "https://api.deepseek.com/v1", "deepseek-chat", ApiStyle.OPENAI_COMPAT),
     OPENROUTER("OpenRouter", "https://openrouter.ai/api/v1", "openai/gpt-4o-mini", ApiStyle.OPENAI_COMPAT),
     GEMINI(
-        "Google Gemini",
-        "https://generativelanguage.googleapis.com/v1beta",
-        "gemini-3.8-flash",
-        ApiStyle.GEMINI,
-        listOf(
-            "gemini-3.8-flash",
-            "gemini-3.7-flash",
-            "gemini-3.6-flash",
-            "gemini-3.5-flash",
-            "gemini-3.5-flash-lite",
-        ),
+        "Gemini",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "gemini-2.5-flash",
+        ApiStyle.OPENAI_COMPAT,
+        listOf("gemini-3.5-flash", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.5-pro"),
     ),
     VIKEY(
         "Vikey",

@@ -117,7 +117,7 @@ private fun greeting(): String {
 }
 
 @Composable
-fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel()) {
+fun ChatScreen(onSettings: () -> Unit, onFileServer: () -> Unit = {}, viewModel: ChatViewModel = hiltViewModel()) {
     val sessions by viewModel.sessionList.collectAsState()
     val activeId by viewModel.activeSessionId.collectAsState()
     val messages by viewModel.messages.collectAsState()
@@ -172,6 +172,10 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
                 },
                 onRename = viewModel::renameSession,
                 onDelete = viewModel::deleteSession,
+                onFileServer = {
+                    scope.launch { drawerState.close() }
+                    onFileServer()
+                },
                 onSettings = {
                     scope.launch { drawerState.close() }
                     onSettings()

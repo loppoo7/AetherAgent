@@ -28,4 +28,9 @@ abstract class ToolModule {
     @Binds @IntoSet abstract fun listCommits(tool: ListCommitsTool): AgentTool
     @Binds @IntoSet abstract fun listIssues(tool: ListIssuesTool): AgentTool
     @Binds @IntoSet abstract fun webSearch(tool: WebSearchTool): AgentTool
+    @Binds @IntoSet abstract fun serverList(tool: com.aether.agent.domain.agent_tools.PteroListFilesTool): AgentTool
+    @Binds @IntoSet abstract fun serverRead(tool: com.aether.agent.domain.agent_tools.PteroReadFileTool): AgentTool
+    @Binds @IntoSet abstract fun serverWrite(tool: com.aether.agent.domain.agent_tools.PteroWriteFileTool): AgentTool
+    @Binds @IntoSet abstract fun serverDelete(tool: com.aether.agent.domain.agent_tools.PteroDeleteTool): AgentTool
+    @Binds @IntoSet abstract fun serverPower(tool: com.aether.agent.domain.agent_tools.PteroPowerTool): AgentTool
 }

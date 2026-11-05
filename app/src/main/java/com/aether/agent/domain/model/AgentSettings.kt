@@ -37,6 +37,9 @@ data class AgentSettings(
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
     val confirmWrites: Boolean = true,
     val roleSelectorEnabled: Boolean = true,
+    val panelUrl: String = "",
+    val pteroApiKey: String = "",
+    val serverAgentMode: AgentMode = AgentMode.OFF,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
 ) {
     val apiKey: String get() = apiKeys[provider].orEmpty()

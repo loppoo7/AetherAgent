@@ -71,6 +71,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val login by viewModel.login.collectAsState()
     var draft by remember(current) { mutableStateOf(current) }
     var showKey by remember { mutableStateOf(false) }
+    var showPteroKey by remember { mutableStateOf(false) }
     var showRepoPicker by remember { mutableStateOf(false) }
     val palette = LocalAetherPalette.current
 
@@ -212,6 +213,39 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     )
                 }
             }
+        }
+
+        Section("Server Pterodactyl") {
+            OutlinedTextField(
+                value = draft.panelUrl,
+                onValueChange = { draft = draft.copy(panelUrl = it) },
+                label = { Text("URL panel (https://...)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = draft.pteroApiKey,
+                onValueChange = { draft = draft.copy(pteroApiKey = it) },
+                label = { Text("API key Client") },
+                singleLine = true,
+                visualTransformation = if (showPteroKey) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconAction(
+                        icon = if (showPteroKey) AetherIcon.EyeOff else AetherIcon.Eye,
+                        description = if (showPteroKey) "Sembunyikan key" else "Tampilkan key",
+                        onClick = { showPteroKey = !showPteroKey },
+                        tint = palette.muted,
+                        boxSize = 40.dp,
+                        iconSize = 20.dp,
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                "Buat API key di panel: Account lalu API Credentials. Key ini memberi akses ke server milikmu.",
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.muted,
+            )
         }
 
         Section("Aplikasi") {

@@ -24,4 +24,5 @@ abstract class RepositoryModule {
     @Binds @Singleton abstract fun bindGithubGateway(impl: GithubGatewayImpl): GithubGateway
     @Binds @Singleton abstract fun bindLlmGateway(impl: LlmGatewayImpl): LlmGateway
     @Binds @Singleton abstract fun bindGithubAuthGateway(impl: GithubAuthGatewayImpl): GithubAuthGateway
+    @Binds @Singleton abstract fun bindPterodactylGateway(impl: com.aether.agent.data.repository.PterodactylGatewayImpl): com.aether.agent.domain.repository.PterodactylGateway
 }

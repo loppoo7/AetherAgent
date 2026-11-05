@@ -9,6 +9,8 @@ interface AgentTool {
     val parameters: JsonObject
     /** Aksi yang mengubah repo harus disetujui pengguna jika confirmWrites aktif. */
     val requiresApproval: Boolean get() = false
+    /** Tool file server Pterodactyl, diatur oleh mode Agen AI, bukan peran. */
+    val isServerTool: Boolean get() = false
 
     /** Label singkat untuk action card, contoh: "Menulis app/Main.kt". */
     fun describe(args: JsonObject): String

@@ -1,5 +1,6 @@
 package com.aether.agent.data.local.datastore
 
+import com.aether.agent.domain.model.AgentMode
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -38,6 +39,9 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         val systemPrompt = stringPreferencesKey("system_prompt")
         val confirmWrites = booleanPreferencesKey("confirm_writes")
         val roleSelectorEnabled = booleanPreferencesKey("role_selector_enabled")
+        val panelUrl = stringPreferencesKey("ptero_url")
+        val pteroKey = stringPreferencesKey("ptero_key")
+        val serverMode = stringPreferencesKey("server_agent_mode")
         val themeMode = stringPreferencesKey("theme_mode")
         fun apiKey(p: Provider) = stringPreferencesKey("api_key_${p.name}")
     }
@@ -59,6 +63,9 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
             systemPrompt = p[Keys.systemPrompt] ?: DEFAULT_SYSTEM_PROMPT,
             confirmWrites = p[Keys.confirmWrites] ?: true,
             roleSelectorEnabled = p[Keys.roleSelectorEnabled] ?: true,
+            panelUrl = p[Keys.panelUrl].orEmpty(),
+            pteroApiKey = SecretBox.decrypt(p[Keys.pteroKey].orEmpty()),
+            serverAgentMode = AgentMode.entries.firstOrNull { it.name == p[Keys.serverMode] } ?: AgentMode.OFF,
             themeMode = ThemeMode.entries.firstOrNull { it.name == p[Keys.themeMode] } ?: ThemeMode.SYSTEM,
         )
     }
@@ -78,6 +85,9 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
             p[Keys.systemPrompt] = s.systemPrompt
             p[Keys.confirmWrites] = s.confirmWrites
             p[Keys.roleSelectorEnabled] = s.roleSelectorEnabled
+            p[Keys.panelUrl] = s.panelUrl.trim()
+            p[Keys.pteroKey] = SecretBox.encrypt(s.pteroApiKey.trim())
+            p[Keys.serverMode] = s.serverAgentMode.name
             p[Keys.themeMode] = s.themeMode.name
             Provider.entries.forEach { prov ->
                 p[Keys.apiKey(prov)] = SecretBox.encrypt(s.apiKeys[prov].orEmpty().trim())
