@@ -4,11 +4,14 @@ import android.util.Base64
 import com.aether.agent.data.api.github.GithubClient
 import com.aether.agent.data.api.github.GithubConfig
 import com.aether.agent.data.api.readableErrors
+import com.aether.agent.domain.model.GithubRepo
 import com.aether.agent.domain.repository.GithubGateway
 import com.aether.agent.domain.repository.SettingsRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -25,6 +28,29 @@ class GithubGatewayImpl @Inject constructor(
             "Owner dan nama repo GitHub belum diatur di Pengaturan."
         }
         return GithubConfig(s.githubToken, s.githubOwner, s.githubRepo, s.githubBranch)
+    }
+
+    override suspend fun listRepos(): List<GithubRepo> = readableErrors {
+        val token = settings.observeSettings().first().githubToken
+        require(token.isNotBlank()) { "Hubungkan akun GitHub di Pengaturan dulu." }
+        val out = mutableListOf<GithubRepo>()
+        for (page in 1..3) {
+            val batch = client.userRepos(token, page)
+            for (e in batch) {
+                val o = e.jsonObject
+                if (o["archived"]?.jsonPrimitive?.booleanOrNull == true) continue
+                out += GithubRepo(
+                    owner = o["owner"]?.jsonObject?.get("login")?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    name = o["name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    isPrivate = o["private"]?.jsonPrimitive?.booleanOrNull == true,
+                    description = o["description"]?.jsonPrimitive?.contentOrNull,
+                    defaultBranch = o["default_branch"]?.jsonPrimitive?.contentOrNull ?: "main",
+                    canPush = o["permissions"]?.jsonObject?.get("push")?.jsonPrimitive?.booleanOrNull != false,
+                )
+            }
+            if (batch.size < 100) break
+        }
+        out
     }
 
     override suspend fun listFiles(): List<String> = readableErrors {

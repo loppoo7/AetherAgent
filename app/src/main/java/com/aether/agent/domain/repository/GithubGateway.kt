@@ -1,6 +1,9 @@
 package com.aether.agent.domain.repository
 
+import com.aether.agent.domain.model.GithubRepo
+
 interface GithubGateway {
+    suspend fun listRepos(): List<GithubRepo>
     suspend fun listFiles(): List<String>
     suspend fun readFile(path: String): String?
     suspend fun writeFile(path: String, content: String, message: String): String

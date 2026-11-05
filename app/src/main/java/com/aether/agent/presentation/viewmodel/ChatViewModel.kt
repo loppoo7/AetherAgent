@@ -6,12 +6,14 @@ import com.aether.agent.domain.agent.ActionStatus
 import com.aether.agent.domain.agent.AgentEvent
 import com.aether.agent.domain.model.AgentSettings
 import com.aether.agent.domain.model.ChatSession
+import com.aether.agent.domain.model.GithubRepo
 import com.aether.agent.domain.model.Message
 import com.aether.agent.domain.repository.SettingsRepository
 import com.aether.agent.domain.usecase.ChatSessionsUseCase
 import com.aether.agent.domain.usecase.ClearChatUseCase
 import com.aether.agent.domain.usecase.ObserveChatUseCase
 import com.aether.agent.domain.usecase.RunAgentUseCase
+import com.aether.agent.domain.usecase.UpdateSettingsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -40,7 +42,8 @@ class ChatViewModel @Inject constructor(
     private val runAgent: RunAgentUseCase,
     private val clearChat: ClearChatUseCase,
     private val sessions: ChatSessionsUseCase,
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
+    private val updateSettings: UpdateSettingsUseCase,
 ) : ViewModel() {
 
     val sessionList: StateFlow<List<ChatSession>> =
@@ -125,6 +128,20 @@ class ChatViewModel @Inject constructor(
     fun stop() {
         _approval.value?.decision?.complete(false)
         job?.cancel()
+    }
+
+    /** Simpan repo pilihan dan pakai branch default repo itu. */
+    fun selectRepo(repo: GithubRepo) {
+        viewModelScope.launch {
+            val current = settingsRepository.observeSettings().first()
+            updateSettings(
+                current.copy(
+                    githubOwner = repo.owner,
+                    githubRepo = repo.name,
+                    githubBranch = repo.defaultBranch,
+                ),
+            )
+        }
     }
 
     fun newChat() {

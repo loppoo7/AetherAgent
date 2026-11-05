@@ -58,6 +58,7 @@ import com.aether.agent.domain.model.ThemeMode
 import com.aether.agent.domain.usecase.GithubLoginState
 import com.aether.agent.presentation.components.AetherIcon
 import com.aether.agent.presentation.components.IconAction
+import com.aether.agent.presentation.components.RepoPickerDialog
 import com.aether.agent.presentation.components.StatusDot
 import com.aether.agent.presentation.ui.theme.LocalAetherPalette
 import com.aether.agent.presentation.ui.theme.Terracotta
@@ -69,6 +70,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val login by viewModel.login.collectAsState()
     var draft by remember(current) { mutableStateOf(current) }
     var showKey by remember { mutableStateOf(false) }
+    var showRepoPicker by remember { mutableStateOf(false) }
     val palette = LocalAetherPalette.current
 
     Column(
@@ -104,9 +106,14 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 singleLine = true,
                 visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
-                    TextButton(onClick = { showKey = !showKey }) {
-                        Text(if (showKey) "Sembunyikan" else "Lihat", color = palette.muted)
-                    }
+                    IconAction(
+                        icon = if (showKey) AetherIcon.EyeOff else AetherIcon.Eye,
+                        description = if (showKey) "Sembunyikan key" else "Tampilkan key",
+                        onClick = { showKey = !showKey },
+                        tint = palette.muted,
+                        boxSize = 40.dp,
+                        iconSize = 20.dp,
+                    )
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -117,6 +124,18 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (draft.provider.models.size > 1) {
+                Text("Pilih cepat", style = MaterialTheme.typography.labelMedium, color = palette.muted)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    draft.provider.models.forEach { m ->
+                        FilterChip(
+                            selected = draft.model == m,
+                            onClick = { draft = draft.copy(model = m) },
+                            label = { Text(m.substringAfter('/')) },
+                        )
+                    }
+                }
+            }
             Text("Gaya jawaban", style = MaterialTheme.typography.labelMedium, color = palette.muted)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AnswerStyle.entries.forEach { style ->
@@ -146,6 +165,20 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 onCancel = viewModel::cancelConnect,
                 onDisconnect = viewModel::disconnectGithub,
             )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Repo kerja", style = MaterialTheme.typography.labelMedium, color = palette.muted)
+                    Text(
+                        if (draft.githubOwner.isNotBlank() && draft.githubRepo.isNotBlank()) {
+                            "${draft.githubOwner}/${draft.githubRepo}"
+                        } else {
+                            "Belum dipilih"
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+                Button(onClick = { showRepoPicker = true }) { Text("Pilih repo") }
+            }
             OutlinedTextField(
                 value = draft.githubOwner,
                 onValueChange = { draft = draft.copy(githubOwner = it) },
@@ -199,6 +232,22 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             Text("Simpan")
         }
         Spacer(Modifier.height(24.dp))
+    }
+
+    if (showRepoPicker) {
+        RepoPickerDialog(
+            selectedOwner = draft.githubOwner,
+            selectedRepo = draft.githubRepo,
+            onDismiss = { showRepoPicker = false },
+            onPick = { repo ->
+                draft = draft.copy(
+                    githubOwner = repo.owner,
+                    githubRepo = repo.name,
+                    githubBranch = repo.defaultBranch,
+                )
+                showRepoPicker = false
+            },
+        )
     }
 }
 

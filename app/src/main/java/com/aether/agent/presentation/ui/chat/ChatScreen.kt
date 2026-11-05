@@ -53,11 +53,13 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.aether.agent.presentation.components.AIcon
 import com.aether.agent.presentation.components.AetherIcon
+import com.aether.agent.presentation.components.AetherMark
 import com.aether.agent.presentation.components.AgentActionCard
 import com.aether.agent.presentation.components.AppDrawer
 import com.aether.agent.presentation.components.ApprovalDialog
 import com.aether.agent.presentation.components.ChatBubble
 import com.aether.agent.presentation.components.IconAction
+import com.aether.agent.presentation.components.RepoPickerDialog
 import com.aether.agent.presentation.components.ThinkingIndicator
 import com.aether.agent.presentation.ui.theme.LocalAetherPalette
 import com.aether.agent.presentation.ui.theme.Terracotta
@@ -66,13 +68,39 @@ import com.aether.agent.presentation.viewmodel.ChatViewModel
 import java.time.LocalTime
 import kotlinx.coroutines.launch
 
-private data class Suggestion(val label: String, val prompt: String)
+private data class Suggestion(val category: String, val label: String, val prompt: String)
 
-private val suggestions = listOf(
-    Suggestion("Baca struktur repo", "Baca struktur repo lalu jelaskan arsitekturnya secara singkat."),
-    Suggestion("10 commit terakhir", "Tampilkan 10 commit terakhir dan ringkas perubahannya."),
-    Suggestion("Issue yang terbuka", "Lihat issue yang masih terbuka dan kelompokkan berdasarkan prioritas."),
+private val suggestionPool: List<List<Suggestion>> = listOf(
+    listOf(
+        Suggestion("Pelajari", "Baca struktur repo", "Baca struktur repo lalu jelaskan arsitekturnya secara singkat."),
+        Suggestion("Pelajari", "Ringkas commit terbaru", "Tampilkan 10 commit terakhir dan ringkas perubahannya."),
+        Suggestion("Pelajari", "Cek issue terbuka", "Lihat issue yang masih terbuka dan kelompokkan berdasarkan prioritas."),
+        Suggestion("Pelajari", "Jelaskan alur utama", "Cari file utama (entry point) di repo ini lalu jelaskan alur kerjanya."),
+        Suggestion("Pelajari", "Daftar dependensi", "Baca file build dan daftar dependensi utama beserta fungsinya."),
+    ),
+    listOf(
+        Suggestion("Perbaiki", "Cari potensi bug", "Baca file kode utama dan cari potensi bug atau penanganan error yang kurang. Jangan ubah apa pun dulu."),
+        Suggestion("Perbaiki", "Periksa keamanan", "Periksa repo untuk kebiasaan tidak aman, misalnya key atau token yang tertulis di kode. Laporkan saja, jangan ubah."),
+        Suggestion("Perbaiki", "Rapikan penanganan error", "Cari bagian yang tidak menangani error dengan baik dan usulkan perbaikannya."),
+        Suggestion("Perbaiki", "Cari kode tidak terpakai", "Cari file, fungsi, atau import yang kelihatannya tidak terpakai lalu daftarkan."),
+    ),
+    listOf(
+        Suggestion("Bangun", "Usulkan fitur kecil", "Usulkan satu fitur kecil yang masuk akal untuk proyek ini lalu jelaskan langkah mengerjakannya."),
+        Suggestion("Bangun", "Buat branch baru", "Buat branch baru bernama fitur-baru dari main."),
+        Suggestion("Bangun", "Siapkan pull request", "Buat pull request dari branch kerja ke main dengan deskripsi singkat."),
+        Suggestion("Bangun", "Tambah pengujian", "Usulkan pengujian unit yang paling penting untuk ditambahkan di repo ini."),
+    ),
+    listOf(
+        Suggestion("Dokumentasi", "Perbarui README", "Baca README dan kode, lalu usulkan pembaruan README agar sesuai kondisi terbaru."),
+        Suggestion("Dokumentasi", "Tulis changelog", "Buat ringkasan changelog dari commit terakhir."),
+        Suggestion("Dokumentasi", "Cari praktik terbaik", "Cari di web praktik terbaik untuk menstrukturkan proyek seperti ini, lalu rangkum."),
+        Suggestion("Dokumentasi", "Jelaskan untuk pemula", "Jelaskan proyek ini untuk pengembang baru dalam beberapa paragraf pendek."),
+    ),
 )
+
+/** Tiga saran dari tiga kategori berbeda, dipilih acak setiap chat baru. */
+private fun pickSuggestions(): List<Suggestion> =
+    suggestionPool.shuffled().take(3).map { it.random() }
 
 private fun greeting(): String {
     val hour = LocalTime.now().hour
@@ -99,13 +127,16 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var input by rememberSaveable { mutableStateOf("") }
+    val picks = remember(activeId) { pickSuggestions() }
+    var showRepoPicker by remember { mutableStateOf(false) }
+    val repoSet = settings.githubOwner.isNotBlank() && settings.githubRepo.isNotBlank()
 
     val status = cards.lastOrNull { it.state == CardState.RUNNING }?.title
     val title = sessions.firstOrNull { it.id == activeId }?.title ?: "AetherAgent"
     val subtitle = if (settings.githubOwner.isNotBlank() && settings.githubRepo.isNotBlank()) {
         "${settings.githubOwner}/${settings.githubRepo} · ${settings.githubBranch}"
     } else {
-        "Repo belum diatur"
+        "Pilih repo"
     }
 
     BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
@@ -147,6 +178,7 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
                 subtitle = subtitle,
                 onMenu = { scope.launch { drawerState.open() } },
                 onClear = viewModel::clear,
+                onRepo = { showRepoPicker = true },
             )
 
             LazyColumn(
@@ -156,7 +188,14 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 if (messages.isEmpty() && cards.isEmpty() && !running) {
-                    item { EmptyState(onPick = { input = it }) }
+                    item {
+                        EmptyState(
+                            picks = picks,
+                            repoSet = repoSet,
+                            onPick = { input = it },
+                            onPickRepo = { showRepoPicker = true },
+                        )
+                    }
                 }
                 items(messages, key = { it.id }) { ChatBubble(it) }
                 items(cards, key = { it.id }) { AgentActionCard(it) }
@@ -189,10 +228,22 @@ fun ChatScreen(onSettings: () -> Unit, viewModel: ChatViewModel = hiltViewModel(
     approval?.let { pending ->
         ApprovalDialog(pending = pending, onResolve = viewModel::resolveApproval)
     }
+
+    if (showRepoPicker) {
+        RepoPickerDialog(
+            selectedOwner = settings.githubOwner,
+            selectedRepo = settings.githubRepo,
+            onDismiss = { showRepoPicker = false },
+            onPick = { repo ->
+                viewModel.selectRepo(repo)
+                showRepoPicker = false
+            },
+        )
+    }
 }
 
 @Composable
-private fun TopBar(title: String, subtitle: String, onMenu: () -> Unit, onClear: () -> Unit) {
+private fun TopBar(title: String, subtitle: String, onMenu: () -> Unit, onClear: () -> Unit, onRepo: () -> Unit) {
     val palette = LocalAetherPalette.current
     var menuOpen by remember { mutableStateOf(false) }
     Row(
@@ -209,13 +260,23 @@ private fun TopBar(title: String, subtitle: String, onMenu: () -> Unit, onClear:
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = palette.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onRepo)
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = palette.muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                AIcon(AetherIcon.ChevronDown, tint = palette.muted, size = 14.dp)
+            }
         }
         Box {
             IconAction(AetherIcon.More, "Opsi chat", { menuOpen = true })
@@ -233,16 +294,21 @@ private fun TopBar(title: String, subtitle: String, onMenu: () -> Unit, onClear:
 }
 
 @Composable
-private fun EmptyState(onPick: (String) -> Unit) {
+private fun EmptyState(
+    picks: List<Suggestion>,
+    repoSet: Boolean,
+    onPick: (String) -> Unit,
+    onPickRepo: () -> Unit,
+) {
     val palette = LocalAetherPalette.current
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(top = 56.dp),
+            .padding(top = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        AIcon(AetherIcon.Sparkle, tint = Terracotta, size = 44.dp)
-        Spacer(Modifier.height(16.dp))
+        AetherMark(size = 88.dp)
+        Spacer(Modifier.height(14.dp))
         Text(
             greeting(),
             style = MaterialTheme.typography.headlineSmall.copy(fontSize = 32.sp, lineHeight = 38.sp),
@@ -257,23 +323,38 @@ private fun EmptyState(onPick: (String) -> Unit) {
         )
         Spacer(Modifier.height(28.dp))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            suggestions.forEach { s ->
-                Surface(
-                    color = palette.cardBg,
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(0.5.dp, palette.border),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        s.label,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPick(s.prompt) }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                    )
+            if (!repoSet) {
+                EmptyCard(category = "Mulai", label = "Pilih repo kerja", onClick = onPickRepo)
+            } else {
+                picks.forEach { s ->
+                    EmptyCard(category = s.category, label = s.label, onClick = { onPick(s.prompt) })
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyCard(category: String, label: String, onClick: () -> Unit) {
+    val palette = LocalAetherPalette.current
+    Surface(
+        color = palette.cardBg,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(0.5.dp, palette.border),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(category.uppercase(), style = MaterialTheme.typography.labelSmall, color = Terracotta)
+                Text(label, style = MaterialTheme.typography.bodyMedium)
+            }
+            AIcon(AetherIcon.ChevronRight, tint = palette.muted, size = 18.dp)
         }
     }
 }

@@ -33,7 +33,7 @@ import kotlin.math.sin
  */
 enum class AetherIcon {
     Menu, More, Plus, ArrowUp, Stop, Check, Close, Minus,
-    ChevronDown, ChevronRight, Back, Copy, Settings, Sparkle,
+    ChevronDown, ChevronRight, Back, Copy, Settings, Sparkle, Eye, EyeOff,
 }
 
 @Composable
@@ -122,6 +122,15 @@ private fun DrawScope.drawAetherIcon(icon: AetherIcon, tint: Color, s: Float, sw
             drawCircle(color = tint, radius = 2.4f * s, center = p(15f, 7f))
             drawCircle(color = tint, radius = 2.4f * s, center = p(8f, 12f))
             drawCircle(color = tint, radius = 2.4f * s, center = p(14f, 17f))
+        }
+        AetherIcon.Eye, AetherIcon.EyeOff -> {
+            val path = Path()
+            path.moveTo(2f * s, 12f * s)
+            path.cubicTo(7f * s, 5f * s, 17f * s, 5f * s, 22f * s, 12f * s)
+            path.cubicTo(17f * s, 19f * s, 7f * s, 19f * s, 2f * s, 12f * s)
+            drawPath(path = path, color = tint, style = stroke)
+            drawCircle(color = tint, radius = 3f * s, center = p(12f, 12f), style = stroke)
+            if (icon == AetherIcon.EyeOff) line(4f, 20f, 20f, 4f)
         }
         AetherIcon.Sparkle -> {
             // Bintang empat sudut milik AetherAgent (bukan logo Anthropic).

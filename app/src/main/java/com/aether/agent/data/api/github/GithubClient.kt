@@ -104,6 +104,11 @@ class GithubClient @Inject constructor(private val http: HttpClient) {
             }.toString())
         }.body<JsonObject>()
 
+    suspend fun userRepos(token: String, page: Int): JsonArray =
+        http.get("$api/user/repos?per_page=100&page=$page&sort=updated&affiliation=owner,collaborator,organization_member") {
+            github(token)
+        }.body<JsonArray>()
+
     suspend fun commits(c: GithubConfig, limit: Int): JsonArray =
         http.get("${repo(c)}/commits?sha=${c.branch}&per_page=$limit") { github(c.token) }.body<JsonArray>()
 

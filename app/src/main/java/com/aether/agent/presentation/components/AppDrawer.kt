@@ -67,15 +67,22 @@ fun AppDrawer(
         drawerContainerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(Modifier.fillMaxSize()) {
-            Column(Modifier.padding(start = 22.dp, end = 22.dp, top = 18.dp, bottom = 4.dp)) {
-                Text("AetherAgent", style = MaterialTheme.typography.headlineSmall)
-                Text(
-                    modelLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = palette.muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            Row(
+                Modifier.padding(start = 20.dp, end = 22.dp, top = 18.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AetherMark(size = 44.dp)
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text("AetherAgent", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        modelLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = palette.muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
 
             Button(

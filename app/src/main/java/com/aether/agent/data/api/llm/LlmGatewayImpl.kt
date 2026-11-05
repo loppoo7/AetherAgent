@@ -10,9 +10,11 @@ import com.aether.agent.domain.model.ToolSpec
 import com.aether.agent.domain.repository.LlmGateway
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.ResponseException
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
@@ -44,7 +46,17 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
         require(settings.apiKey.isNotBlank()) { "API key ${settings.provider.label} belum diisi di Pengaturan." }
         return readableErrors {
             when (settings.provider.style) {
-                ApiStyle.OPENAI_COMPAT -> openAiCompatible(settings, system, messages, tools)
+                ApiStyle.OPENAI_COMPAT -> try {
+                    openAiCompatible(settings, system, messages, tools)
+                } catch (e: ResponseException) {
+                    val detail = runCatching { e.response.bodyAsText() }.getOrDefault("")
+                    if (e.response.status.value == 400 && detail.contains("temperature", ignoreCase = true)) {
+                        // Sebagian model menolak parameter temperature; ulangi tanpa itu.
+                        openAiCompatible(settings, system, messages, tools, useTemperature = false)
+                    } else {
+                        throw IllegalStateException("HTTP ${e.response.status.value}: ${detail.take(300)}", e)
+                    }
+                }
                 ApiStyle.ANTHROPIC -> anthropic(settings, system, messages, tools)
             }
         }
@@ -55,10 +67,11 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
         system: String,
         messages: List<LlmMessage>,
         tools: List<ToolSpec>,
+        useTemperature: Boolean = true,
     ): LlmReply {
         val body = buildJsonObject {
             put("model", s.model)
-            put("temperature", s.answerStyle.temperature)
+            if (useTemperature) put("temperature", s.answerStyle.temperature)
             putJsonArray("messages") {
                 add(buildJsonObject { put("role", "system"); put("content", system) })
                 messages.forEach { add(it.toOpenAi()) }
