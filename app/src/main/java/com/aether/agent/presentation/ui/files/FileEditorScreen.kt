@@ -223,55 +223,64 @@ fun FileEditorScreen(
             state.error != null -> Box(Modifier.fillMaxWidth().weight(1f).padding(20.dp), contentAlignment = Alignment.Center) {
                 Text(state.error.orEmpty(), color = MaterialTheme.colorScheme.error)
             }
-            else -> Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .onSizeChanged { viewportPx = it.height }
-                    .verticalScroll(vScroll),
-            ) {
-                // Editor dan gutter nomor baris memakai satu TextLayoutResult yang sama, jadi selalu sejajar.
-                // Nomor baris hanya digambar untuk baris yang terlihat, sehingga tetap ringan untuk file panjang.
-                Box(Modifier.fillMaxWidth()) {
-                    Box(Modifier.horizontalScroll(hScroll)) {
-                        BasicTextField(
-                            value = field,
-                            onValueChange = {
-                                field = it
-                                viewModel.onTextChange(it.text)
-                            },
-                            textStyle = codeStyle.copy(color = palette.codeText),
-                            cursorBrush = SolidColor(Terracotta),
-                            visualTransformation = transformation,
-                            onTextLayout = { layout = it },
-                            modifier = Modifier
-                                .background(palette.codeBg)
-                                .padding(start = GutterWidth + 8.dp, end = 12.dp, top = EditorPadTop, bottom = EditorPadTop),
-                        )
-                    }
-                    Canvas(
+            else -> {
+                // Tinggi konten editor, dipakai agar kolom nomor baris punya tinggi scroll yang sama.
+                val contentHeight = with(density) {
+                    ((layout?.size?.height ?: 0) + EditorPadTop.toPx() * 2).toDp()
+                }
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    // Kolom nomor baris: tidak ikut digeser ke samping, dan ikut bergerak naik-turun
+                    // bersama editor karena memakai ScrollState vertikal yang sama.
+                    Box(
                         Modifier
-                            .align(Alignment.TopStart)
                             .width(GutterWidth)
-                            .fillMaxHeight(),
+                            .fillMaxHeight()
+                            .background(palette.codeHeader)
+                            .verticalScroll(vScroll),
                     ) {
-                        drawRect(palette.codeHeader)
-                        val l = layout ?: return@Canvas
-                        if (l.lineCount == 0) return@Canvas
-                        val padTop = EditorPadTop.toPx()
-                        val firstY = (vScroll.value - padTop).coerceAtLeast(0f)
-                        val lastY = (vScroll.value + viewportPx - padTop).coerceAtLeast(0f)
-                        val first = l.getLineForVerticalPosition(firstY)
-                        val last = l.getLineForVerticalPosition(lastY).coerceAtMost(l.lineCount - 1)
-                        val rightEdge = GutterWidth.toPx() - 8.dp.toPx()
-                        for (line in first..last) {
-                            val measured = textMeasurer.measure((line + 1).toString(), numberStyle)
-                            drawText(
-                                measured,
-                                topLeft = Offset(
-                                    rightEdge - measured.size.width,
-                                    padTop + l.getLineTop(line),
-                                ),
+                        Canvas(Modifier.width(GutterWidth).height(contentHeight)) {
+                            val l = layout ?: return@Canvas
+                            if (l.lineCount == 0) return@Canvas
+                            val padTop = EditorPadTop.toPx()
+                            val firstY = (vScroll.value - padTop).coerceAtLeast(0f)
+                            val lastY = (vScroll.value + viewportPx - padTop).coerceAtLeast(0f)
+                            val first = l.getLineForVerticalPosition(firstY)
+                            val last = l.getLineForVerticalPosition(lastY).coerceAtMost(l.lineCount - 1)
+                            val rightEdge = GutterWidth.toPx() - 8.dp.toPx()
+                            for (line in first..last) {
+                                val measured = textMeasurer.measure((line + 1).toString(), numberStyle)
+                                drawText(
+                                    measured,
+                                    topLeft = Offset(
+                                        rightEdge - measured.size.width,
+                                        padTop + l.getLineTop(line),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                    // Editor: digeser vertikal bersama kolom nomor, dan horizontal sendiri.
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .onSizeChanged { viewportPx = it.height }
+                            .verticalScroll(vScroll),
+                    ) {
+                        Box(Modifier.horizontalScroll(hScroll)) {
+                            BasicTextField(
+                                value = field,
+                                onValueChange = {
+                                    field = it
+                                    viewModel.onTextChange(it.text)
+                                },
+                                textStyle = codeStyle.copy(color = palette.codeText),
+                                cursorBrush = SolidColor(Terracotta),
+                                visualTransformation = transformation,
+                                onTextLayout = { layout = it },
+                                modifier = Modifier
+                                    .background(palette.codeBg)
+                                    .padding(start = 8.dp, end = 12.dp, top = EditorPadTop, bottom = EditorPadTop),
                             )
                         }
                     }
