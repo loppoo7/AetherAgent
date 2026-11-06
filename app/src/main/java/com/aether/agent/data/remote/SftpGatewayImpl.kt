@@ -28,55 +28,159 @@ class SftpGatewayImpl @Inject constructor(
 ) : SftpGateway {
 
     /**
-     * Buka koneksi SFTP baru untuk setiap operasi (cukup cepat untuk pemakaian manual).
-     * Fingerprint host dicatat saat pertama konek; jika berubah, koneksi ditolak.
+     * Tahap pertama hanya mengambil fingerprint saat key belum dikenal.
+     * Verifier sengaja menolak host yang belum dipercaya sehingga kredensial tidak
+     * pernah dikirim sebelum pengguna menyetujui fingerprint tersebut.
      */
-    private suspend fun <T> withSftp(serverId: String, block: (SFTPClient) -> T): T = withContext(Dispatchers.IO) {
-        val s = settings.observeSettings().first()
-        require(s.sftpHost.isNotBlank() && s.sftpUser.isNotBlank() && s.sftpPassword.isNotBlank()) {
-            "Host, username panel, dan password SFTP belum diisi di Pengaturan."
+    override suspend fun inspectHostKey(host: String, port: Int, knownHostKey: String): String =
+        withContext(Dispatchers.IO) {
+            require(host.isNotBlank()) { "Host SFTP belum diisi." }
+            require(port in 1..65535) { "Port SFTP harus antara 1 dan 65535." }
+
+            val pinned = knownHostKey.trim()
+            var observed: String? = null
+            var mismatch = false
+            val ssh = SSHClient()
+            try {
+                ssh.connectTimeout = CONNECT_TIMEOUT_MS
+                ssh.timeout = IO_TIMEOUT_MS
+                ssh.addHostKeyVerifier(object : HostKeyVerifier {
+                    override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
+                        val fingerprint = SecurityUtils.getFingerprint(key)
+                        observed = fingerprint
+                        if (pinned.isBlank()) return false
+                        mismatch = fingerprint != pinned
+                        return !mismatch
+                    }
+
+                    override fun findExistingAlgorithms(hostname: String, port: Int): List<String> = emptyList()
+                })
+                ssh.connect(host.trim(), port)
+                observed ?: pinned
+            } catch (e: Exception) {
+                when {
+                    pinned.isBlank() && !observed.isNullOrBlank() -> observed!!
+                    mismatch -> throw IllegalStateException(
+                        "Fingerprint host SFTP berubah. Jangan lanjutkan sebelum memastikan perubahan ini aman.",
+                        e,
+                    )
+                    else -> throw IllegalStateException(
+                        "Tidak dapat membaca fingerprint SFTP. Periksa alamat host, port, jaringan, dan firewall.",
+                        e,
+                    )
+                }
+            } finally {
+                runCatching { ssh.disconnect() }
+            }
         }
-        val pinned = s.sftpHostKey
-        var learned: String? = null
+
+    /** Verifikasi fingerprint yang sudah disetujui, lalu baru kirim kredensial. */
+    override suspend fun testConnection(
+        serverId: String,
+        host: String,
+        port: Int,
+        username: String,
+        password: String,
+        knownHostKey: String,
+    ): Unit = withContext(Dispatchers.IO) {
+        require(serverId.isNotBlank()) { "ID server tidak ditemukan dari Client API." }
+        require(host.isNotBlank()) { "Host SFTP belum diisi." }
+        require(port in 1..65535) { "Port SFTP harus antara 1 dan 65535." }
+        require(username.isNotBlank() && password.isNotBlank()) {
+            "Username dan password SFTP harus diisi."
+        }
+        require(knownHostKey.isNotBlank()) {
+            "Fingerprint belum diverifikasi. Tekan Connect untuk membaca fingerprint terlebih dahulu."
+        }
+
         var mismatch = false
+        var connected = false
+        var authenticated = false
         val ssh = SSHClient()
         try {
             ssh.connectTimeout = CONNECT_TIMEOUT_MS
             ssh.timeout = IO_TIMEOUT_MS
             ssh.addHostKeyVerifier(object : HostKeyVerifier {
                 override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
-                    val fp = SecurityUtils.getFingerprint(key)
-                    return when {
-                        pinned.isBlank() -> {
-                            learned = fp
-                            true
-                        }
-                        pinned == fp -> true
-                        else -> {
-                            mismatch = true
-                            false
-                        }
-                    }
+                    val fingerprint = SecurityUtils.getFingerprint(key)
+                    mismatch = fingerprint != knownHostKey
+                    return !mismatch
                 }
 
                 override fun findExistingAlgorithms(hostname: String, port: Int): List<String> = emptyList()
             })
-            ssh.connect(s.sftpHost.trim(), s.sftpPort)
-            ssh.authPassword("${s.sftpUser.trim()}.$serverId", s.sftpPassword)
-            learned?.let { settings.update(s.copy(sftpHostKey = it)) }
-            ssh.newSFTPClient().use { client -> block(client) }
+            ssh.connect(host.trim(), port)
+            connected = true
+            ssh.authPassword("${username.trim()}.$serverId", password)
+            authenticated = true
+            ssh.newSFTPClient().use { client -> client.ls(SERVER_ROOT) }
         } catch (e: Exception) {
-            if (mismatch) {
-                throw IllegalStateException(
-                    "Fingerprint server berubah. Tekan 'Lupakan' di Pengaturan jika kamu yakin server itu aman.",
+            when {
+                mismatch -> throw IllegalStateException(
+                    "Fingerprint host berubah sejak disetujui. Koneksi dibatalkan demi keamanan.",
+                    e,
+                )
+                !connected -> throw IllegalStateException(
+                    "Koneksi ke host SFTP gagal. Periksa host, port, jaringan, dan firewall.",
+                    e,
+                )
+                !authenticated -> throw IllegalStateException(
+                    "Login SFTP ditolak. Periksa password dan format username.idserver.",
+                    e,
+                )
+                else -> throw IllegalStateException(
+                    "Login berhasil, tetapi folder server tidak dapat diakses: ${e.message ?: "izin ditolak"}.",
                     e,
                 )
             }
-            throw e
         } finally {
             runCatching { ssh.disconnect() }
         }
     }
+
+    /**
+     * Operasi file hanya boleh berjalan memakai fingerprint yang sudah disimpan
+     * setelah persetujuan eksplisit dari pengguna.
+     */
+    private suspend fun <T> withSftp(serverId: String, block: (SFTPClient) -> T): T =
+        withContext(Dispatchers.IO) {
+            val s = settings.observeSettings().first()
+            require(s.sftpHost.isNotBlank() && s.sftpUser.isNotBlank() && s.sftpPassword.isNotBlank()) {
+                "Host, username panel, dan password SFTP belum diisi di Pengaturan."
+            }
+            require(s.sftpHostKey.isNotBlank()) {
+                "Fingerprint SFTP belum diverifikasi. Buka Pengaturan > Server lalu tekan Connect."
+            }
+
+            var mismatch = false
+            val ssh = SSHClient()
+            try {
+                ssh.connectTimeout = CONNECT_TIMEOUT_MS
+                ssh.timeout = IO_TIMEOUT_MS
+                ssh.addHostKeyVerifier(object : HostKeyVerifier {
+                    override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
+                        val fingerprint = SecurityUtils.getFingerprint(key)
+                        mismatch = fingerprint != s.sftpHostKey
+                        return !mismatch
+                    }
+
+                    override fun findExistingAlgorithms(hostname: String, port: Int): List<String> = emptyList()
+                })
+                ssh.connect(s.sftpHost.trim(), s.sftpPort)
+                ssh.authPassword("${s.sftpUser.trim()}.$serverId", s.sftpPassword)
+                ssh.newSFTPClient().use { client -> block(client) }
+            } catch (e: Exception) {
+                if (mismatch) {
+                    throw IllegalStateException(
+                        "Fingerprint server berubah. Koneksi ditolak; periksa host sebelum memperbarui fingerprint.",
+                        e,
+                    )
+                }
+                throw e
+            } finally {
+                runCatching { ssh.disconnect() }
+            }
+        }
 
     private fun full(path: String): String =
         SERVER_ROOT + if (path == "/" || path.isBlank()) "" else path.trimEnd('/')

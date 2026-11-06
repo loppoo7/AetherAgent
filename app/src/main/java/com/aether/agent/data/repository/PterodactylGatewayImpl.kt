@@ -55,17 +55,33 @@ class PterodactylGatewayImpl @Inject constructor(
 
     private fun JsonObject.text(key: String): String = this[key]?.jsonPrimitive?.contentOrNull.orEmpty()
 
-    override suspend fun listServers(): List<PteroServer> = readableErrors {
-        val (url, key) = base()
+    private suspend fun requestServers(url: String, key: String): List<PteroServer> {
         val o: JsonObject = http.get("$url/api/client") { auth(key) }.body()
-        o["data"]?.jsonArray.orEmpty().map { e ->
-            val a = e.jsonObject["attributes"]!!.jsonObject
+        return o["data"]?.jsonArray.orEmpty().mapNotNull { element ->
+            val attributes = element.jsonObject["attributes"]?.jsonObject ?: return@mapNotNull null
+            val identifier = attributes.text("identifier")
+            if (identifier.isBlank()) return@mapNotNull null
             PteroServer(
-                id = a.text("identifier"),
-                name = a.text("name"),
-                suspended = a["is_suspended"]?.jsonPrimitive?.booleanOrNull == true,
+                id = identifier,
+                name = attributes.text("name").ifBlank { identifier },
+                suspended = attributes["is_suspended"]?.jsonPrimitive?.booleanOrNull == true,
             )
         }
+    }
+
+    override suspend fun testConnection(panelUrl: String, apiKey: String): List<PteroServer> = readableErrors {
+        val url = panelUrl.trim().trimEnd('/')
+        val key = apiKey.trim()
+        require(url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true)) {
+            "URL panel harus diawali http:// atau https://."
+        }
+        require(key.isNotBlank()) { "Client API Key belum diisi." }
+        requestServers(url, key)
+    }
+
+    override suspend fun listServers(): List<PteroServer> = readableErrors {
+        val (url, key) = base()
+        requestServers(url, key)
     }
 
     override suspend fun serverState(serverId: String): String = readableErrors {

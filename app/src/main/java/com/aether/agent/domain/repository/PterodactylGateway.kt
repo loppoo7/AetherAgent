@@ -4,6 +4,8 @@ import com.aether.agent.domain.model.PteroFile
 import com.aether.agent.domain.model.PteroServer
 
 interface PterodactylGateway {
+    /** Uji Client API memakai kredensial yang sedang diedit, tanpa menyimpan pengaturan. */
+    suspend fun testConnection(panelUrl: String, apiKey: String): List<PteroServer>
     suspend fun listServers(): List<PteroServer>
     suspend fun serverState(serverId: String): String
     suspend fun listFiles(serverId: String, dir: String): List<PteroFile>

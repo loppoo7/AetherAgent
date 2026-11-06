@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -65,12 +66,16 @@ import com.aether.agent.presentation.components.RepoPickerDialog
 import com.aether.agent.presentation.components.StatusDot
 import com.aether.agent.presentation.ui.theme.LocalAetherPalette
 import com.aether.agent.presentation.ui.theme.Terracotta
+import com.aether.agent.presentation.viewmodel.ClientApiCheckState
+import com.aether.agent.presentation.viewmodel.SftpCheckState
 import com.aether.agent.presentation.viewmodel.SettingsViewModel
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val current by viewModel.settings.collectAsState()
     val login by viewModel.login.collectAsState()
+    val clientApiCheck by viewModel.clientApiCheck.collectAsState()
+    val sftpCheck by viewModel.sftpCheck.collectAsState()
     var draft by remember(current) { mutableStateOf(current) }
     var showKey by remember { mutableStateOf(false) }
     var showPteroKey by remember { mutableStateOf(false) }
@@ -262,17 +267,72 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            Button(
+                onClick = { viewModel.connectSftp(draft) },
+                enabled = sftpCheck !is SftpCheckState.Checking,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (sftpCheck is SftpCheckState.Checking) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Connect SFTP")
+                }
+            }
+            when (val check = sftpCheck) {
+                SftpCheckState.Idle -> Unit
+                SftpCheckState.Checking -> Text(
+                    "Memeriksa host dan koneksi SFTP…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = palette.muted,
+                )
+                is SftpCheckState.AwaitingTrust -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Fingerprint perangkat/host ditemukan. Cocokkan fingerprint ini dengan penyedia server sebelum menyetujuinya:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.muted,
+                    )
+                    Text(
+                        check.fingerprint,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = AetherMono,
+                    )
+                    Button(
+                        onClick = {
+                            val updated = draft.copy(sftpHostKey = check.fingerprint)
+                            draft = updated
+                            viewModel.trustAndConnect(updated)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Percayai fingerprint & Connect")
+                    }
+                }
+                is SftpCheckState.Connected -> Text(
+                    "Terhubung ke ${check.serverName}. Fingerprint sudah diverifikasi.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF16A34A),
+                )
+                is SftpCheckState.Failure -> Text(
+                    check.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Fingerprint server", style = MaterialTheme.typography.labelMedium)
                     Text(
-                        if (draft.sftpHostKey.isBlank()) "Belum dikenali. Dicatat saat pertama konek." else draft.sftpHostKey,
+                        if (draft.sftpHostKey.isBlank()) "Belum diverifikasi. Tekan Connect SFTP untuk membaca fingerprint." else draft.sftpHostKey,
                         style = MaterialTheme.typography.bodySmall,
                         color = palette.muted,
                         maxLines = 2,
                     )
                 }
-                TextButton(onClick = { draft = draft.copy(sftpHostKey = "") }) { Text("Lupakan") }
+                TextButton(onClick = {
+                    draft = draft.copy(sftpHostKey = "")
+                    viewModel.resetSftpCheck()
+                }) { Text("Lupakan") }
             }
             Text(
                 "Login SFTP memakai username.idserver secara otomatis, jadi satu akun panel berlaku untuk semua server.",
@@ -305,6 +365,41 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            Text(
+                "Gunakan Client API Key dari menu Account API (umumnya diawali ptlc_), bukan Application API Key.",
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.muted,
+            )
+            Button(
+                onClick = { viewModel.testClientApi(draft.panelUrl, draft.pteroApiKey) },
+                enabled = clientApiCheck !is ClientApiCheckState.Checking,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (clientApiCheck is ClientApiCheckState.Checking) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Test Client API")
+                }
+            }
+            when (val check = clientApiCheck) {
+                ClientApiCheckState.Idle -> Unit
+                ClientApiCheckState.Checking -> Text(
+                    "Memeriksa URL panel dan API key…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = palette.muted,
+                )
+                is ClientApiCheckState.Success -> Text(
+                    check.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF16A34A),
+                )
+                is ClientApiCheckState.Failure -> Text(
+                    check.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
 
         Section("Aplikasi") {
