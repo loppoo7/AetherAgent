@@ -2,6 +2,7 @@ package com.aether.agent.presentation.ui.files
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -36,16 +38,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -58,8 +64,12 @@ import com.aether.agent.presentation.ui.theme.AetherMono
 import com.aether.agent.presentation.ui.theme.LocalAetherPalette
 import com.aether.agent.presentation.ui.theme.Terracotta
 import com.aether.agent.presentation.viewmodel.FileEditorViewModel
+import kotlin.math.roundToInt
 
 private val codeStyle = TextStyle(fontFamily = AetherMono, fontSize = 13.sp, lineHeight = 20.sp)
+private val GutterWidth = 44.dp
+private val EditorPadTop = 10.dp
+private val CursorMargin = 24.dp
 
 @Composable
 fun FileEditorScreen(
@@ -69,6 +79,8 @@ fun FileEditorScreen(
     val state by viewModel.state.collectAsState()
     val palette = LocalAetherPalette.current
     val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val numberStyle = codeStyle.copy(fontSize = 11.sp, color = palette.muted)
 
     var field by remember { mutableStateOf(TextFieldValue("")) }
     var loaded by remember { mutableStateOf(false) }
@@ -77,6 +89,7 @@ fun FileEditorScreen(
     var current by remember { mutableIntStateOf(0) }
     var navTick by remember { mutableIntStateOf(0) }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var viewportPx by remember { mutableIntStateOf(0) }
     var confirmDiscard by remember { mutableStateOf(false) }
 
     val vScroll = rememberScrollState()
@@ -97,7 +110,6 @@ fun FileEditorScreen(
                 TransformedText(highlightCode(text.text, matches, safeCurrent), OffsetMapping.Identity)
         }
     }
-    val lineCount = field.text.count { it == '\n' } + 1
 
     // Gulir ke hasil pencarian yang dipilih. Hanya jalan saat pengguna pindah hasil, bukan saat mengetik.
     LaunchedEffect(navTick) {
@@ -105,9 +117,29 @@ fun FileEditorScreen(
         val l = layout ?: return@LaunchedEffect
         val line = l.getLineForOffset(matches[safeCurrent].first)
         val lineTop = l.getLineTop(line)
-        val offsetTop = with(density) { (6.dp + 10.dp).toPx() }
+        val offsetTop = with(density) { EditorPadTop.toPx() }
         val viewport = with(density) { 160.dp.toPx() }
-        vScroll.animateScrollTo((offsetTop + lineTop - viewport).coerceAtLeast(0f).toInt())
+        vScroll.animateScrollTo((offsetTop + lineTop - viewport).coerceAtLeast(0f).roundToInt())
+    }
+
+    // Kursor selalu digulir agar tetap terlihat, termasuk saat keyboard muncul dan menutupi layar.
+    LaunchedEffect(field.selection, layout, viewportPx) {
+        val l = layout ?: return@LaunchedEffect
+        if (viewportPx == 0) return@LaunchedEffect
+        val offset = field.selection.end.coerceIn(0, field.text.length)
+        val rect = l.getCursorRect(offset)
+        val padTop = with(density) { EditorPadTop.toPx() }
+        val margin = with(density) { CursorMargin.toPx() }
+        val top = padTop + rect.top
+        val bottom = padTop + rect.bottom
+        val view = vScroll.value.toFloat()
+        val viewH = viewportPx.toFloat()
+        val target = when {
+            bottom + margin > view + viewH -> bottom + margin - viewH
+            top - margin < view -> top - margin
+            else -> null
+        }
+        if (target != null) vScroll.scrollTo(target.coerceAtLeast(0f).roundToInt())
     }
 
     fun goTo(index: Int) {
@@ -191,44 +223,58 @@ fun FileEditorScreen(
             state.error != null -> Box(Modifier.fillMaxWidth().weight(1f).padding(20.dp), contentAlignment = Alignment.Center) {
                 Text(state.error.orEmpty(), color = MaterialTheme.colorScheme.error)
             }
-            else -> Row(
+            else -> Box(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .verticalScroll(vScroll)
-                    .padding(top = 6.dp),
+                    .onSizeChanged { viewportPx = it.height }
+                    .verticalScroll(vScroll),
             ) {
-                // Nomor baris: tinggi tiap baris sama dengan lineHeight editor, dan editor tidak membungkus baris,
-                // jadi nomor selalu sejajar dengan barisnya. Baris panjang digulir ke samping.
-                Column(
-                    Modifier
-                        .background(palette.codeHeader)
-                        .padding(horizontal = 10.dp, vertical = 10.dp),
-                    horizontalAlignment = Alignment.End,
-                ) {
-                    for (i in 1..lineCount) {
-                        Text(
-                            i.toString(),
-                            style = codeStyle.copy(fontSize = 11.sp, color = palette.muted),
-                            fontFamily = AetherMono,
+                // Editor dan gutter nomor baris memakai satu TextLayoutResult yang sama, jadi selalu sejajar.
+                // Nomor baris hanya digambar untuk baris yang terlihat, sehingga tetap ringan untuk file panjang.
+                Box(Modifier.fillMaxWidth()) {
+                    Box(Modifier.horizontalScroll(hScroll)) {
+                        BasicTextField(
+                            value = field,
+                            onValueChange = {
+                                field = it
+                                viewModel.onTextChange(it.text)
+                            },
+                            textStyle = codeStyle.copy(color = palette.codeText),
+                            cursorBrush = SolidColor(Terracotta),
+                            visualTransformation = transformation,
+                            onTextLayout = { layout = it },
+                            modifier = Modifier
+                                .background(palette.codeBg)
+                                .padding(start = GutterWidth + 8.dp, end = 12.dp, top = EditorPadTop, bottom = EditorPadTop),
                         )
                     }
-                }
-                Box(Modifier.weight(1f).horizontalScroll(hScroll)) {
-                    BasicTextField(
-                        value = field,
-                        onValueChange = {
-                            field = it
-                            viewModel.onTextChange(it.text)
-                        },
-                        textStyle = codeStyle.copy(color = palette.codeText),
-                        cursorBrush = SolidColor(Terracotta),
-                        visualTransformation = transformation,
-                        onTextLayout = { layout = it },
-                        modifier = Modifier
-                            .background(palette.codeBg)
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                    )
+                    Canvas(
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .width(GutterWidth)
+                            .fillMaxHeight(),
+                    ) {
+                        drawRect(palette.codeHeader)
+                        val l = layout ?: return@Canvas
+                        if (l.lineCount == 0) return@Canvas
+                        val padTop = EditorPadTop.toPx()
+                        val firstY = (vScroll.value - padTop).coerceAtLeast(0f)
+                        val lastY = (vScroll.value + viewportPx - padTop).coerceAtLeast(0f)
+                        val first = l.getLineForVerticalPosition(firstY)
+                        val last = l.getLineForVerticalPosition(lastY).coerceAtMost(l.lineCount - 1)
+                        val rightEdge = GutterWidth.toPx() - 8.dp.toPx()
+                        for (line in first..last) {
+                            val measured = textMeasurer.measure((line + 1).toString(), numberStyle)
+                            drawText(
+                                measured,
+                                topLeft = Offset(
+                                    rightEdge - measured.size.width,
+                                    padTop + l.getLineTop(line),
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         }
