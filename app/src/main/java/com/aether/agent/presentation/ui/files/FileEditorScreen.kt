@@ -75,6 +75,7 @@ private val CursorMargin = 24.dp
 @Composable
 fun FileEditorScreen(
     onBack: () -> Unit,
+    onAskAi: () -> Unit,
     viewModel: FileEditorViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -176,6 +177,10 @@ fun FileEditorScreen(
                     maxLines = 1,
                 )
             }
+            IconAction(AetherIcon.Sparkle, "Tanya AI", {
+                viewModel.askAi(field.text)
+                onAskAi()
+            }, tint = Terracotta)
             IconAction(AetherIcon.Search, "Cari di file", {
                 searchOpen = !searchOpen
                 if (!searchOpen) query = ""
@@ -272,8 +277,9 @@ fun FileEditorScreen(
                             BasicTextField(
                                 value = field,
                                 onValueChange = {
-                                    field = it
-                                    viewModel.onTextChange(it.text)
+                                    val next = applyAutoIndent(field, it)
+                                    field = next
+                                    viewModel.onTextChange(next.text)
                                 },
                                 textStyle = codeStyle.copy(color = palette.codeText),
                                 cursorBrush = SolidColor(Terracotta),
@@ -331,4 +337,25 @@ fun FileEditorScreen(
             dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Lanjut edit") } },
         )
     }
+}
+
+/**
+ * Auto indent: saat Enter ditekan, indentasi baris sebelumnya ikut turun.
+ * Jika baris sebelumnya berakhir dengan ':', indentasi bertambah 4 spasi.
+ */
+private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextFieldValue {
+    val newText = new.text
+    val caret = new.selection.end
+    if (!new.selection.collapsed || caret < 1) return new
+    if (newText.length != old.text.length + 1 || newText[caret - 1] != '\n') return new
+
+    val prevLineStart = newText.lastIndexOf('\n', caret - 2) + 1
+    val prevLine = newText.substring(prevLineStart, caret - 1)
+    val indent = prevLine.takeWhile { it == ' ' || it == '\t' }
+    val extra = if (prevLine.trimEnd().endsWith(":")) "    " else ""
+    val insert = indent + extra
+    if (insert.isEmpty()) return new
+
+    val updated = newText.substring(0, caret) + insert + newText.substring(caret)
+    return TextFieldValue(updated, TextRange(caret + insert.length))
 }

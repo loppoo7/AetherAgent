@@ -44,7 +44,11 @@ class ChatViewModel @Inject constructor(
     private val sessions: ChatSessionsUseCase,
     private val settingsRepository: SettingsRepository,
     private val updateSettings: UpdateSettingsUseCase,
+    private val handoff: ChatHandoff,
 ) : ViewModel() {
+    val pendingInput: StateFlow<String?> = handoff.pending
+
+    fun consumeHandoff() = handoff.consume()
     val sessionList: StateFlow<List<ChatSession>> =
         sessions.observe().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val settings: StateFlow<AgentSettings> =

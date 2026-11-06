@@ -185,6 +185,7 @@ class FileManagerViewModel @Inject constructor(
 class FileEditorViewModel @Inject constructor(
     private val ptero: PterodactylGateway,
     private val sftp: SftpGateway,
+    private val handoff: ChatHandoff,
     savedState: SavedStateHandle,
 ) : ViewModel() {
 
@@ -227,6 +228,12 @@ class FileEditorViewModel @Inject constructor(
 
     fun onTextChange(text: String) {
         _state.value = _state.value.copy(text = text)
+    }
+
+    /** Kirim isi editor saat ini ke kotak input Chat, lalu layar pindah ke Chat. */
+    fun askAi(text: String) {
+        val fence = "```"
+        handoff.offer("Tolong periksa file $path berikut:\n\n$fence\n$text\n$fence\n\n")
     }
 
     /** Simpan. Jika [restart] true, server di-restart setelah file tersimpan. */

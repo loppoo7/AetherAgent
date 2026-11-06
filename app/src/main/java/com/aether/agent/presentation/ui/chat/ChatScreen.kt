@@ -132,6 +132,13 @@ fun ChatScreen(onSettings: () -> Unit, onFileServer: () -> Unit = {}, viewModel:
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var input by rememberSaveable { mutableStateOf("") }
+    val pendingInput by viewModel.pendingInput.collectAsState()
+    LaunchedEffect(pendingInput) {
+        pendingInput?.let {
+            input = it
+            viewModel.consumeHandoff()
+        }
+    }
     val picks = remember(activeId) { pickSuggestions() }
     var showRepoPicker by remember { mutableStateOf(false) }
     var showContextPicker by remember { mutableStateOf(false) }
