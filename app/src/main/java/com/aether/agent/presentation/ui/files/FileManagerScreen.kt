@@ -54,7 +54,7 @@ private enum class Prompt { NEW_FOLDER, RENAME, DELETE }
 @Composable
 fun FileManagerScreen(
     onBack: () -> Unit,
-    onEdit: (path: String) -> Unit,
+    onEdit: (serverId: String, path: String) -> Unit,
     viewModel: FileManagerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -96,7 +96,7 @@ fun FileManagerScreen(
                     FileRow(
                         file = file,
                         onOpen = {
-                            if (file.isDir) viewModel.open(viewModel.pathOf(file.name)) else onEdit(viewModel.pathOf(file.name))
+                            if (file.isDir) viewModel.open(viewModel.pathOf(file.name)) else onEdit(viewModel.serverId, viewModel.pathOf(file.name))
                         },
                         onRename = {
                             target = file

@@ -35,10 +35,12 @@ fun AppNavHost() {
         composable("files/{server}/{name}") {
             FileManagerScreen(
                 onBack = { nav.popBackStack() },
-                onEdit = { path -> nav.navigate("editor/${Uri.encode(path)}") },
+                onEdit = { serverId, path ->
+                    nav.navigate("editor/${Uri.encode(serverId)}/${Uri.encode(path)}")
+                },
             )
         }
-        composable("editor/{path}") {
+        composable("editor/{server}/{path}") {
             FileEditorScreen(onBack = { nav.popBackStack() })
         }
     }
