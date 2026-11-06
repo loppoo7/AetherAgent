@@ -16,7 +16,9 @@ import com.aether.agent.domain.model.ThemeMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 private val Context.settingsStore by preferencesDataStore(name = "agent_settings")
@@ -47,6 +49,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         val sftpUser = stringPreferencesKey("sftp_user")
         val sftpPass = stringPreferencesKey("sftp_pass")
         val sftpHostKey = stringPreferencesKey("sftp_hostkey")
+        val sftpServerId = stringPreferencesKey("sftp_server_id")
         val themeMode = stringPreferencesKey("theme_mode")
         fun apiKey(p: Provider) = stringPreferencesKey("api_key_${p.name}")
     }
@@ -76,9 +79,10 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
             sftpUser = p[Keys.sftpUser].orEmpty(),
             sftpPassword = SecretBox.decrypt(p[Keys.sftpPass].orEmpty()),
             sftpHostKey = p[Keys.sftpHostKey].orEmpty(),
+            sftpServerId = p[Keys.sftpServerId].orEmpty(),
             themeMode = ThemeMode.entries.firstOrNull { it.name == p[Keys.themeMode] } ?: ThemeMode.SYSTEM,
         )
-    }
+    }.flowOn(Dispatchers.IO)
 
     suspend fun update(s: AgentSettings) {
         context.settingsStore.edit { p ->
@@ -103,6 +107,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
             p[Keys.sftpUser] = s.sftpUser.trim()
             p[Keys.sftpPass] = SecretBox.encrypt(s.sftpPassword)
             p[Keys.sftpHostKey] = s.sftpHostKey
+            p[Keys.sftpServerId] = s.sftpServerId.trim()
             p[Keys.themeMode] = s.themeMode.name
             Provider.entries.forEach { prov ->
                 p[Keys.apiKey(prov)] = SecretBox.encrypt(s.apiKeys[prov].orEmpty().trim())

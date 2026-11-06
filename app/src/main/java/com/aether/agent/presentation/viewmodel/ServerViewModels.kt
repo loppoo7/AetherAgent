@@ -52,6 +52,16 @@ class ServerListViewModel @Inject constructor(
     fun refresh() {
         _state.value = _state.value.copy(loading = true, error = null)
         viewModelScope.launch {
+            val cfg = settingsRepo.observeSettings().first()
+            if (cfg.panelUrl.isBlank() || cfg.pteroApiKey.isBlank()) {
+                _state.value = _state.value.copy(
+                    loading = false,
+                    servers = emptyList(),
+                    error = null,
+                    notice = "Isi URL panel dan API key di Pengaturan untuk memuat daftar server dan restart.",
+                )
+                return@launch
+            }
             try {
                 _state.value = _state.value.copy(loading = false, servers = ptero.listServers())
             } catch (e: CancellationException) {

@@ -46,6 +46,8 @@ data class AgentSettings(
     val sftpPassword: String = "",
     /** Fingerprint host SFTP yang sudah dikenali. Kosong berarti belum pernah konek. */
     val sftpHostKey: String = "",
+    /** ID server dari panel (8 karakter). Opsional, hanya untuk tes login. */
+    val sftpServerId: String = "",
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
 ) {
     val apiKey: String get() = apiKeys[provider].orEmpty()

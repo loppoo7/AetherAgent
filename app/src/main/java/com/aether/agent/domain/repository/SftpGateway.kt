@@ -4,18 +4,18 @@ import com.aether.agent.domain.model.PteroFile
 
 /** Akses file server lewat SFTP. Path relatif terhadap folder server (dimulai "/"). */
 interface SftpGateway {
-    /** Baca fingerprint host tanpa mengirim username/password. Host baru akan meminta persetujuan pengguna. */
-    suspend fun inspectHostKey(host: String, port: Int, knownHostKey: String): String
+    /** Langkah 1: baca fingerprint host. Tidak mengirim kredensial. */
+    suspend fun fetchFingerprint(host: String, port: Int): String
 
-    /** Login dan pastikan direktori server dapat diakses setelah fingerprint dipercaya. */
-    suspend fun testConnection(
-        serverId: String,
+    /** Langkah 3: login dengan fingerprint yang sudah disetujui, lalu baca folder server. */
+    suspend fun checkLogin(
         host: String,
         port: Int,
         username: String,
         password: String,
-        knownHostKey: String,
-    )
+        serverId: String,
+        pinnedFingerprint: String,
+    ): String
 
     suspend fun listFiles(serverId: String, dir: String): List<PteroFile>
     suspend fun readFile(serverId: String, path: String): String

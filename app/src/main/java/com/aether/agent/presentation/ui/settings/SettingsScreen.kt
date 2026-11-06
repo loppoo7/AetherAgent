@@ -260,6 +260,13 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 )
             }
             OutlinedTextField(
+                value = draft.sftpServerId,
+                onValueChange = { updateServerDraft(draft.copy(sftpServerId = it.trim())) },
+                label = { Text("ID server (opsional, untuk tes login)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
                 value = draft.sftpPassword,
                 onValueChange = { updateServerDraft(draft.copy(sftpPassword = it)) },
                 label = { Text("Password SFTP (password akun panel)") },
@@ -319,7 +326,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     }
                 }
                 is SftpCheckState.Connected -> Text(
-                    "Terhubung ke ${check.serverName}. Fingerprint sudah diverifikasi.",
+                    check.serverName,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF16A34A),
                 )

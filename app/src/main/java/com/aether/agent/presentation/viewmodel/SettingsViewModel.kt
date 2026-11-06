@@ -128,107 +128,80 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    /** Tahap pertama: cek API, temukan server untuk format username.idserver, lalu baca fingerprint. */
+    /** Langkah 1: baca fingerprint host tanpa login. Jika belum pernah disetujui, minta persetujuan. */
     fun connectSftp(value: AgentSettings) {
         if (_sftpCheck.value is SftpCheckState.Checking) return
         _sftpCheck.value = SftpCheckState.Checking
-        draftSaveJob?.cancel()
         viewModelScope.launch {
             try {
-                updateSettings(value)
-                withTimeout(50_000) {
-                    withContext(Dispatchers.IO) {
-                require(value.sftpHost.isNotBlank()) { "Host SFTP belum diisi." }
-                require(value.sftpUser.isNotBlank() && value.sftpPassword.isNotBlank()) {
-                    "Username dan password SFTP belum diisi."
+                val fingerprint = withTimeout(25_000) {
+                    sftp.fetchFingerprint(value.sftpHost, value.sftpPort)
                 }
-                val servers = pterodactyl.testConnection(value.panelUrl, value.pteroApiKey)
-                val target = servers.firstOrNull { !it.suspended } ?: servers.firstOrNull()
-                    ?: throw IllegalStateException("Tidak ada server yang bisa dipakai untuk menguji login SFTP.")
-                val fingerprint = sftp.inspectHostKey(
-                    host = value.sftpHost,
-                    port = value.sftpPort,
-                    knownHostKey = value.sftpHostKey,
-                )
-                if (value.sftpHostKey.isBlank()) {
-                    _sftpCheck.value = SftpCheckState.AwaitingTrust(
+                when {
+                    value.sftpHostKey.isBlank() -> _sftpCheck.value = SftpCheckState.AwaitingTrust(
                         fingerprint = fingerprint,
-                        serverId = target.id,
-                        serverName = target.name,
+                        serverId = value.sftpServerId,
+                        serverName = value.sftpHost,
                     )
-                } else {
-                    sftp.testConnection(
-                        serverId = target.id,
-                        host = value.sftpHost,
-                        port = value.sftpPort,
-                        username = value.sftpUser,
-                        password = value.sftpPassword,
-                        knownHostKey = value.sftpHostKey,
+                    value.sftpHostKey == fingerprint -> finishLogin(value, fingerprint)
+                    else -> _sftpCheck.value = SftpCheckState.Failure(
+                        "Fingerprint server berubah sejak disetujui. Jika kamu yakin server aman, tekan Lupakan lalu ulangi.",
                     )
-                    _sftpCheck.value = SftpCheckState.Connected(fingerprint, target.name)
-                }
-                    }
                 }
             } catch (e: TimeoutCancellationException) {
-                _sftpCheck.value = SftpCheckState.Failure(
-                    "Koneksi SFTP melewati batas 50 detik. Periksa host, port, dan jaringan.",
-                )
+                _sftpCheck.value = SftpCheckState.Failure("Host SFTP tidak merespons dalam 25 detik. Periksa host, port, dan jaringan.")
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: LinkageError) {
-                _sftpCheck.value = SftpCheckState.Failure(
-                    "Komponen keamanan Android gagal dimuat saat memulai SFTP. Restart aplikasi setelah memperbarui.",
-                )
             } catch (e: Exception) {
-                _sftpCheck.value = SftpCheckState.Failure(
-                    e.message ?: "Koneksi SFTP gagal. Periksa host, port, dan kredensial.",
-                )
+                _sftpCheck.value = SftpCheckState.Failure(e.message ?: "Koneksi SFTP gagal.")
             }
         }
     }
 
-    /** Tahap kedua: hanya setelah pengguna menekan tombol persetujuan fingerprint. */
+    /** Langkah 2: hanya setelah pengguna menyetujui fingerprint. Disimpan lalu lanjut tes login. */
     fun trustAndConnect(value: AgentSettings) {
         val pending = _sftpCheck.value as? SftpCheckState.AwaitingTrust ?: return
-        _sftpCheck.value = SftpCheckState.Checking
-        draftSaveJob?.cancel()
         viewModelScope.launch {
+            val trusted = value.copy(sftpHostKey = pending.fingerprint)
             try {
-                updateSettings(value)
-                withTimeout(50_000) {
-                    withContext(Dispatchers.IO) {
-                val fingerprint = sftp.inspectHostKey(
-                    host = value.sftpHost,
-                    port = value.sftpPort,
-                    knownHostKey = pending.fingerprint,
-                )
-                sftp.testConnection(
-                    serverId = pending.serverId,
+                updateSettings(trusted)
+                finishLogin(trusted, pending.fingerprint)
+            } catch (e: TimeoutCancellationException) {
+                _sftpCheck.value = SftpCheckState.Failure("Tes login melewati batas waktu. Periksa jaringan.")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _sftpCheck.value = SftpCheckState.Failure(e.message ?: "Gagal menyimpan fingerprint.")
+            }
+        }
+    }
+
+    /** Langkah 3: tes login. Tanpa ID server, cukup fingerprint yang tersimpan. */
+    private suspend fun finishLogin(value: AgentSettings, fingerprint: String) {
+        if (value.sftpServerId.isBlank() || value.sftpUser.isBlank() || value.sftpPassword.isBlank()) {
+            _sftpCheck.value = SftpCheckState.Connected(
+                fingerprint,
+                "Fingerprint tersimpan. Isi username, password, dan ID server untuk tes login.",
+            )
+            return
+        }
+        _sftpCheck.value = SftpCheckState.Checking
+        val result = try {
+            withTimeout(40_000) {
+                sftp.checkLogin(
                     host = value.sftpHost,
                     port = value.sftpPort,
                     username = value.sftpUser,
                     password = value.sftpPassword,
-                    knownHostKey = pending.fingerprint,
-                )
-                _sftpCheck.value = SftpCheckState.Connected(fingerprint, pending.serverName)
-                    }
-                }
-            } catch (e: TimeoutCancellationException) {
-                _sftpCheck.value = SftpCheckState.Failure(
-                    "Verifikasi/login SFTP melewati batas 50 detik. Periksa host, port, dan jaringan.",
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: LinkageError) {
-                _sftpCheck.value = SftpCheckState.Failure(
-                    "Komponen keamanan Android gagal dimuat saat verifikasi fingerprint. Restart aplikasi setelah memperbarui.",
-                )
-            } catch (e: Exception) {
-                _sftpCheck.value = SftpCheckState.Failure(
-                    e.message ?: "Verifikasi fingerprint atau login SFTP gagal.",
+                    serverId = value.sftpServerId,
+                    pinnedFingerprint = fingerprint,
                 )
             }
+        } catch (e: TimeoutCancellationException) {
+            _sftpCheck.value = SftpCheckState.Failure("Tes login melewati batas 40 detik.")
+            return
         }
+        _sftpCheck.value = SftpCheckState.Connected(fingerprint, result)
     }
 
     fun resetSftpCheck() {
