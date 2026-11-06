@@ -55,7 +55,7 @@ class SftpGatewayImpl @Inject constructor(
 
                     override fun findExistingAlgorithms(hostname: String, port: Int): List<String> = emptyList()
                 })
-                ssh.connect(host.trim(), port)
+                ssh.connect(normalizeSftpHost(host), port)
                 observed ?: pinned
             } catch (e: Exception) {
                 when {
@@ -166,7 +166,7 @@ class SftpGatewayImpl @Inject constructor(
 
                     override fun findExistingAlgorithms(hostname: String, port: Int): List<String> = emptyList()
                 })
-                ssh.connect(s.sftpHost.trim(), s.sftpPort)
+                ssh.connect(normalizeSftpHost(s.sftpHost), s.sftpPort)
                 ssh.authPassword("${s.sftpUser.trim()}.$serverId", s.sftpPassword)
                 ssh.newSFTPClient().use { client -> block(client) }
             } catch (e: Exception) {
@@ -181,6 +181,16 @@ class SftpGatewayImpl @Inject constructor(
                 runCatching { ssh.disconnect() }
             }
         }
+
+    /** Pengaturan menerima URL node (https://...), sedangkan SSH membutuhkan hostname saja. */
+    private fun normalizeSftpHost(value: String): String {
+        val input = value.trim()
+        val uri = runCatching {
+            java.net.URI(if (input.contains("://")) input else "ssh://$input")
+        }.getOrNull()
+        return uri?.host?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("Host SFTP tidak valid. Masukkan alamat node tanpa path.")
+    }
 
     private fun full(path: String): String =
         SERVER_ROOT + if (path == "/" || path.isBlank()) "" else path.trimEnd('/')
