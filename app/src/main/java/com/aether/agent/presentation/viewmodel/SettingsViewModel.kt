@@ -12,6 +12,10 @@ import com.aether.agent.domain.usecase.UpdateSettingsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -92,13 +96,20 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun testClientApi(panelUrl: String, apiKey: String) {
+        if (_clientApiCheck.value is ClientApiCheckState.Checking) return
         _clientApiCheck.value = ClientApiCheckState.Checking
         viewModelScope.launch {
             try {
-                val servers = pterodactyl.testConnection(panelUrl, apiKey)
+                val servers = withTimeout(25_000) {
+                    withContext(Dispatchers.IO) { pterodactyl.testConnection(panelUrl, apiKey) }
+                }
                 _clientApiCheck.value = ClientApiCheckState.Success(
                     if (servers.isEmpty()) "Client API terhubung, tetapi akun belum memiliki server."
                     else "Client API terhubung · ${servers.size} server ditemukan.",
+                )
+            } catch (e: TimeoutCancellationException) {
+                _clientApiCheck.value = ClientApiCheckState.Failure(
+                    "Tes Client API melewati batas 25 detik. Periksa jaringan dan URL panel.",
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -116,9 +127,12 @@ class SettingsViewModel @Inject constructor(
 
     /** Tahap pertama: cek API, temukan server untuk format username.idserver, lalu baca fingerprint. */
     fun connectSftp(value: AgentSettings) {
+        if (_sftpCheck.value is SftpCheckState.Checking) return
         _sftpCheck.value = SftpCheckState.Checking
         viewModelScope.launch {
             try {
+                withTimeout(50_000) {
+                    withContext(Dispatchers.IO) {
                 require(value.sftpHost.isNotBlank()) { "Host SFTP belum diisi." }
                 require(value.sftpUser.isNotBlank() && value.sftpPassword.isNotBlank()) {
                     "Username dan password SFTP belum diisi."
@@ -148,6 +162,12 @@ class SettingsViewModel @Inject constructor(
                     )
                     _sftpCheck.value = SftpCheckState.Connected(fingerprint, target.name)
                 }
+                    }
+                }
+            } catch (e: TimeoutCancellationException) {
+                _sftpCheck.value = SftpCheckState.Failure(
+                    "Koneksi SFTP melewati batas 50 detik. Periksa host, port, dan jaringan.",
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: LinkageError) {
@@ -168,6 +188,8 @@ class SettingsViewModel @Inject constructor(
         _sftpCheck.value = SftpCheckState.Checking
         viewModelScope.launch {
             try {
+                withTimeout(50_000) {
+                    withContext(Dispatchers.IO) {
                 val fingerprint = sftp.inspectHostKey(
                     host = value.sftpHost,
                     port = value.sftpPort,
@@ -182,6 +204,12 @@ class SettingsViewModel @Inject constructor(
                     knownHostKey = pending.fingerprint,
                 )
                 _sftpCheck.value = SftpCheckState.Connected(fingerprint, pending.serverName)
+                    }
+                }
+            } catch (e: TimeoutCancellationException) {
+                _sftpCheck.value = SftpCheckState.Failure(
+                    "Verifikasi/login SFTP melewati batas 50 detik. Periksa host, port, dan jaringan.",
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: LinkageError) {

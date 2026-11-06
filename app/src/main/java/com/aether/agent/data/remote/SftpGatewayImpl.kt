@@ -109,7 +109,7 @@ class SftpGatewayImpl @Inject constructor(
 
                 override fun findExistingAlgorithms(hostname: String, port: Int): List<String> = emptyList()
             })
-            ssh.connect(host.trim(), port)
+            ssh.connect(normalizeSftpHost(host), port)
             connected = true
             ssh.authPassword("${username.trim()}.$serverId", password)
             authenticated = true
