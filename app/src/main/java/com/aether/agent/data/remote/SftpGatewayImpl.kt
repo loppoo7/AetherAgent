@@ -18,11 +18,22 @@ import net.schmizz.sshj.sftp.SFTPClient
 import net.schmizz.sshj.transport.verification.HostKeyVerifier
 import net.schmizz.sshj.userauth.UserAuthException
 
-/** Folder server di node Pterodactyl. Login SFTP memakai "username.idserver". */
-private const val SERVER_ROOT = "/home/container"
+/**
+ * Root sesi SFTP Wings (Pterodactyl) adalah folder server itu sendiri.
+ * Path "/home/container" hanya ada di dalam container Docker, jadi tidak bisa dipakai di sini.
+ */
+private const val SERVER_ROOT = "/"
 private const val DEFAULT_PORT = 2022
 private const val CONNECT_TIMEOUT_MS = 15_000
 private const val IO_TIMEOUT_MS = 30_000
+
+/** Tahap koneksi, dipakai untuk menyusun pesan error yang jelas. */
+private enum class Stage(val label: String) {
+    CONNECT("Koneksi ke host"),
+    AUTH("Login"),
+    SUBSYSTEM("Membuka layanan SFTP"),
+    FILES("Membaca folder server"),
+}
 
 @Singleton
 class SftpGatewayImpl @Inject constructor(
@@ -45,8 +56,10 @@ class SftpGatewayImpl @Inject constructor(
             })
             ssh.connect(normalizeHost(host), portOf(port))
             observed ?: throw IllegalStateException("Fingerprint host tidak terbaca.")
+        } catch (e: IllegalStateException) {
+            throw e
         } catch (e: Exception) {
-            throw IllegalStateException(connectFailure(e), e)
+            throw IllegalStateException(failure(Stage.CONNECT, e), e)
         } finally {
             runCatching { ssh.disconnect() }
         }
@@ -63,16 +76,20 @@ class SftpGatewayImpl @Inject constructor(
         require(pinnedFingerprint.isNotBlank()) { "Fingerprint belum disetujui." }
         var mismatch = false
         val ssh = SSHClient()
+        var stage = Stage.CONNECT
         try {
             configure(ssh)
             ssh.addHostKeyVerifier(pinnedVerifier(pinnedFingerprint) { mismatch = true })
             ssh.connect(normalizeHost(host), portOf(port))
+            stage = Stage.AUTH
             try {
                 ssh.authPassword(loginUsername(username, serverId), password)
             } catch (e: UserAuthException) {
-                throw IllegalStateException("Login SFTP ditolak. Periksa username panel (tanpa .idserver) dan password.", e)
+                throw IllegalStateException("Login SFTP ditolak. Periksa username panel (tanpa .idserver), password, dan ID server.", e)
             }
+            stage = Stage.SUBSYSTEM
             ssh.newSFTPClient().use { client ->
+                stage = Stage.FILES
                 val count = client.ls(SERVER_ROOT).count { it.name != "." && it.name != ".." }
                 "Login berhasil. $count item di folder server."
             }
@@ -80,7 +97,7 @@ class SftpGatewayImpl @Inject constructor(
             when {
                 mismatch -> throw IllegalStateException("Fingerprint server berubah. Koneksi dibatalkan.", e)
                 e is IllegalStateException -> throw e
-                else -> throw IllegalStateException(connectFailure(e), e)
+                else -> throw IllegalStateException(failure(stage, e), e)
             }
         } finally {
             runCatching { ssh.disconnect() }
@@ -112,16 +129,16 @@ class SftpGatewayImpl @Inject constructor(
 
     override suspend fun deletePaths(serverId: String, dir: String, names: List<String>) {
         withSftp(serverId) { c ->
-            names.forEach { name -> deleteRecursive(c, full(dir) + "/" + name) }
+            names.forEach { name -> deleteRecursive(c, child(dir, name)) }
         }
     }
 
     override suspend fun createFolder(serverId: String, dir: String, name: String) {
-        withSftp(serverId) { c -> c.mkdir(full(dir) + "/" + name) }
+        withSftp(serverId) { c -> c.mkdir(child(dir, name)) }
     }
 
     override suspend fun rename(serverId: String, dir: String, from: String, to: String) {
-        withSftp(serverId) { c -> c.rename(full(dir) + "/" + from, full(dir) + "/" + to) }
+        withSftp(serverId) { c -> c.rename(child(dir, from), child(dir, to)) }
     }
 
     /** Semua operasi file wajib memakai fingerprint yang sudah disetujui di Pengaturan. */
@@ -131,25 +148,31 @@ class SftpGatewayImpl @Inject constructor(
             "Host, username panel, dan password SFTP belum diisi di Pengaturan."
         }
         require(s.sftpHostKey.isNotBlank()) {
-            "Fingerprint SFTP belum disetujui. Buka Pengaturan, bagian Server, lalu tekan Connect SFTP."
+            "Fingerprint SFTP belum disetujui. Buka Pengaturan, bagian SFTP, lalu tekan Baca fingerprint."
         }
         var mismatch = false
         val ssh = SSHClient()
+        var stage = Stage.CONNECT
         try {
             configure(ssh)
             ssh.addHostKeyVerifier(pinnedVerifier(s.sftpHostKey) { mismatch = true })
             ssh.connect(normalizeHost(s.sftpHost), portOf(s.sftpPort))
+            stage = Stage.AUTH
             try {
                 ssh.authPassword(loginUsername(s.sftpUser, serverId), s.sftpPassword)
             } catch (e: UserAuthException) {
-                throw IllegalStateException("Login SFTP ditolak. Periksa username panel dan password.", e)
+                throw IllegalStateException("Login SFTP ditolak. Periksa username panel, password, dan ID server.", e)
             }
-            ssh.newSFTPClient().use { client -> block(client) }
+            stage = Stage.SUBSYSTEM
+            ssh.newSFTPClient().use { client ->
+                stage = Stage.FILES
+                block(client)
+            }
         } catch (e: Exception) {
             when {
                 mismatch -> throw IllegalStateException("Fingerprint server berubah. Koneksi dibatalkan demi keamanan.", e)
-                e is IllegalStateException -> throw e
-                else -> throw IllegalStateException(connectFailure(e), e)
+                e is IllegalStateException || e is IllegalArgumentException -> throw e
+                else -> throw IllegalStateException(failure(stage, e), e)
             }
         } finally {
             runCatching { ssh.disconnect() }
@@ -183,8 +206,13 @@ class SftpGatewayImpl @Inject constructor(
         }
     }
 
+    /** Path absolut di server, dimulai dari SERVER_ROOT. Contoh: "/" + "logs" -> "/logs". */
     private fun full(path: String): String =
-        SERVER_ROOT + if (path == "/" || path.isBlank()) "" else path.trimEnd('/')
+        if (path.isBlank() || path == "/") SERVER_ROOT else path.trimEnd('/')
+
+    /** Path anak di dalam folder [dir], tanpa "//" berlebih. */
+    private fun child(dir: String, name: String): String =
+        full(dir).trimEnd('/') + "/" + name
 
     private fun portOf(port: Int): Int = if (port in 1..65535) port else DEFAULT_PORT
 
@@ -204,6 +232,15 @@ class SftpGatewayImpl @Inject constructor(
         return "$base.$serverId"
     }
 
-    private fun connectFailure(e: Throwable): String =
-        "Koneksi ke host SFTP gagal: ${e.message ?: e::class.simpleName}. Periksa host, port, jaringan, dan firewall."
+    /** Pesan error yang menyebut tahap yang gagal. Pesan generik "failure" dari server diterjemahkan. */
+    private fun failure(stage: Stage, e: Throwable): String {
+        val raw = e.message?.trim().orEmpty()
+        val detail = when {
+            raw.isBlank() -> e::class.simpleName.orEmpty()
+            raw.equals("failure", ignoreCase = true) ->
+                "server menolak permintaan. Pastikan host adalah alamat node, port SFTP benar (biasanya 2022), dan ID server sesuai"
+            else -> raw
+        }
+        return "${stage.label} gagal: $detail. Periksa host, port, jaringan, dan firewall."
+    }
 }
