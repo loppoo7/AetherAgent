@@ -42,7 +42,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose); implementation(libs.androidx.lifecycle.runtime.compose); implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.hilt.android); ksp(libs.hilt.compiler)
     implementation(libs.kotlinx.coroutines.android); implementation(libs.kotlinx.serialization.json)
-    implementation(libs.ktor.client.android); implementation(libs.ktor.client.content.negotiation); implementation(libs.ktor.serialization.kotlinx.json)
+    // OkHttp engine avoids the Android HttpURLConnection default SSLContext failure on affected devices.
+    implementation(libs.ktor.client.okhttp); implementation(libs.ktor.client.content.negotiation); implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.androidx.datastore.preferences)
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("androidx.compose.ui:ui-text-google-fonts")

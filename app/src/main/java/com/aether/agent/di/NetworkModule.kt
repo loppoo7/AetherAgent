@@ -5,7 +5,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.android.Android
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
@@ -19,7 +19,7 @@ object NetworkModule {
     fun provideJson(): Json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     @Provides @Singleton
-    fun provideHttpClient(json: Json): HttpClient = HttpClient(Android) {
+    fun provideHttpClient(json: Json): HttpClient = HttpClient(OkHttp) {
         install(ContentNegotiation) { json(json) }
         install(HttpTimeout) {
             connectTimeoutMillis = 20_000
