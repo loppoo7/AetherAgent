@@ -102,6 +102,10 @@ class SettingsViewModel @Inject constructor(
                 )
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: LinkageError) {
+                _clientApiCheck.value = ClientApiCheckState.Failure(
+                    "Komponen keamanan Android gagal dimuat saat membuat koneksi HTTPS. Restart aplikasi setelah memperbarui.",
+                )
             } catch (e: Exception) {
                 _clientApiCheck.value = ClientApiCheckState.Failure(
                     e.message ?: "Tes Client API gagal. Periksa URL panel dan API key.",
@@ -146,6 +150,10 @@ class SettingsViewModel @Inject constructor(
                 }
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: LinkageError) {
+                _sftpCheck.value = SftpCheckState.Failure(
+                    "Komponen keamanan Android gagal dimuat saat memulai SFTP. Restart aplikasi setelah memperbarui.",
+                )
             } catch (e: Exception) {
                 _sftpCheck.value = SftpCheckState.Failure(
                     e.message ?: "Koneksi SFTP gagal. Periksa host, port, dan kredensial.",
@@ -176,6 +184,10 @@ class SettingsViewModel @Inject constructor(
                 _sftpCheck.value = SftpCheckState.Connected(fingerprint, pending.serverName)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: LinkageError) {
+                _sftpCheck.value = SftpCheckState.Failure(
+                    "Komponen keamanan Android gagal dimuat saat verifikasi fingerprint. Restart aplikasi setelah memperbarui.",
+                )
             } catch (e: Exception) {
                 _sftpCheck.value = SftpCheckState.Failure(
                     e.message ?: "Verifikasi fingerprint atau login SFTP gagal.",
