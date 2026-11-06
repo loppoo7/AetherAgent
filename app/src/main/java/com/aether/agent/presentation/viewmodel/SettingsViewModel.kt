@@ -45,7 +45,7 @@ sealed interface SftpCheckState {
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    repository: SettingsRepository,
+    private val repository: SettingsRepository,
     private val updateSettings: UpdateSettingsUseCase,
     private val connectGithubUseCase: ConnectGithubUseCase,
     private val pterodactyl: PterodactylGateway,
@@ -65,6 +65,7 @@ class SettingsViewModel @Inject constructor(
     val sftpCheck: StateFlow<SftpCheckState> = _sftpCheck.asStateFlow()
 
     private var loginJob: Job? = null
+    private var draftSaveJob: Job? = null
 
     fun connectGithub() {
         loginJob?.cancel()
@@ -95,13 +96,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun testClientApi(panelUrl: String, apiKey: String) {
+    fun testClientApi(value: AgentSettings) {
         if (_clientApiCheck.value is ClientApiCheckState.Checking) return
         _clientApiCheck.value = ClientApiCheckState.Checking
+        draftSaveJob?.cancel()
         viewModelScope.launch {
             try {
+                updateSettings(value)
                 val servers = withTimeout(25_000) {
-                    withContext(Dispatchers.IO) { pterodactyl.testConnection(panelUrl, apiKey) }
+                    withContext(Dispatchers.IO) { pterodactyl.testConnection(value.panelUrl, value.pteroApiKey) }
                 }
                 _clientApiCheck.value = ClientApiCheckState.Success(
                     if (servers.isEmpty()) "Client API terhubung, tetapi akun belum memiliki server."
@@ -129,8 +132,10 @@ class SettingsViewModel @Inject constructor(
     fun connectSftp(value: AgentSettings) {
         if (_sftpCheck.value is SftpCheckState.Checking) return
         _sftpCheck.value = SftpCheckState.Checking
+        draftSaveJob?.cancel()
         viewModelScope.launch {
             try {
+                updateSettings(value)
                 withTimeout(50_000) {
                     withContext(Dispatchers.IO) {
                 require(value.sftpHost.isNotBlank()) { "Host SFTP belum diisi." }
@@ -186,8 +191,10 @@ class SettingsViewModel @Inject constructor(
     fun trustAndConnect(value: AgentSettings) {
         val pending = _sftpCheck.value as? SftpCheckState.AwaitingTrust ?: return
         _sftpCheck.value = SftpCheckState.Checking
+        draftSaveJob?.cancel()
         viewModelScope.launch {
             try {
+                updateSettings(value)
                 withTimeout(50_000) {
                     withContext(Dispatchers.IO) {
                 val fingerprint = sftp.inspectHostKey(
@@ -228,7 +235,17 @@ class SettingsViewModel @Inject constructor(
         _sftpCheck.value = SftpCheckState.Idle
     }
 
+    /** Persist the complete editor draft after a short pause while the user types. */
+    fun persistDraft(value: AgentSettings) {
+        draftSaveJob?.cancel()
+        draftSaveJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(250)
+            updateSettings(value)
+        }
+    }
+
     fun save(value: AgentSettings, onDone: () -> Unit) {
+        draftSaveJob?.cancel()
         viewModelScope.launch {
             updateSettings(value)
             onDone()

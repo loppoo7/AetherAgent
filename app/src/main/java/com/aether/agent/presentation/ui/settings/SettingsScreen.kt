@@ -83,6 +83,11 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     var showRepoPicker by remember { mutableStateOf(false) }
     val palette = LocalAetherPalette.current
 
+    fun updateServerDraft(updated: AgentSettings) {
+        draft = updated
+        viewModel.persistDraft(updated)
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -225,17 +230,22 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 
         Section("Server") {
             Text("File lewat SFTP", style = MaterialTheme.typography.labelMedium, color = palette.muted)
+            Text(
+                "Host ini adalah alamat NODE SFTP, bukan alamat web panel. Boleh masukkan hostname atau URL https://node.domain.com; aplikasi akan mengambil hostname untuk koneksi SSH.",
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.muted,
+            )
             OutlinedTextField(
                 value = draft.sftpHost,
-                onValueChange = { draft = draft.copy(sftpHost = it.trim()) },
-                label = { Text("Host SFTP (alamat node)") },
+                onValueChange = { updateServerDraft(draft.copy(sftpHost = it.trim())) },
+                label = { Text("Host node SFTP") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = if (draft.sftpPort == 0) "" else draft.sftpPort.toString(),
-                    onValueChange = { v -> draft = draft.copy(sftpPort = v.filter { it.isDigit() }.toIntOrNull() ?: 0) },
+                    onValueChange = { v -> updateServerDraft(draft.copy(sftpPort = v.filter { it.isDigit() }.toIntOrNull() ?: 0)) },
                     label = { Text("Port") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -243,15 +253,15 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 )
                 OutlinedTextField(
                     value = draft.sftpUser,
-                    onValueChange = { draft = draft.copy(sftpUser = it.trim()) },
-                    label = { Text("Username panel") },
+                    onValueChange = { updateServerDraft(draft.copy(sftpUser = it.trim())) },
+                    label = { Text("Username panel (tanpa .idserver)") },
                     singleLine = true,
                     modifier = Modifier.weight(0.6f),
                 )
             }
             OutlinedTextField(
                 value = draft.sftpPassword,
-                onValueChange = { draft = draft.copy(sftpPassword = it) },
+                onValueChange = { updateServerDraft(draft.copy(sftpPassword = it)) },
                 label = { Text("Password SFTP (password akun panel)") },
                 singleLine = true,
                 visualTransformation = if (showSftpPass) VisualTransformation.None else PasswordVisualTransformation(),
@@ -300,7 +310,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     Button(
                         onClick = {
                             val updated = draft.copy(sftpHostKey = check.fingerprint)
-                            draft = updated
+                            updateServerDraft(updated)
                             viewModel.trustAndConnect(updated)
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -330,7 +340,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                     )
                 }
                 TextButton(onClick = {
-                    draft = draft.copy(sftpHostKey = "")
+                    updateServerDraft(draft.copy(sftpHostKey = ""))
                     viewModel.resetSftpCheck()
                 }) { Text("Lupakan") }
             }
@@ -339,17 +349,22 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 style = MaterialTheme.typography.bodySmall,
                 color = palette.muted,
             )
-            Text("Restart server (Client API panel)", style = MaterialTheme.typography.labelMedium, color = palette.muted)
+            Text("Client API panel (juga dibutuhkan untuk menemukan ID server SFTP)", style = MaterialTheme.typography.labelMedium, color = palette.muted)
+            Text(
+                "Ini URL WEB PANEL tempat kamu login, bukan URL node SFTP di atas. Contoh: https://panel.domain.com.",
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.muted,
+            )
             OutlinedTextField(
                 value = draft.panelUrl,
-                onValueChange = { draft = draft.copy(panelUrl = it) },
-                label = { Text("URL panel (https://...)") },
+                onValueChange = { updateServerDraft(draft.copy(panelUrl = it)) },
+                label = { Text("URL web panel Pterodactyl (bukan URL node)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = draft.pteroApiKey,
-                onValueChange = { draft = draft.copy(pteroApiKey = it) },
+                onValueChange = { updateServerDraft(draft.copy(pteroApiKey = it)) },
                 label = { Text("API key Client") },
                 singleLine = true,
                 visualTransformation = if (showPteroKey) VisualTransformation.None else PasswordVisualTransformation(),
@@ -372,7 +387,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 color = palette.muted,
             )
             Button(
-                onClick = { viewModel.testClientApi(draft.panelUrl, draft.pteroApiKey) },
+                onClick = { viewModel.testClientApi(draft) },
                 enabled = clientApiCheck !is ClientApiCheckState.Checking,
                 modifier = Modifier.fillMaxWidth(),
             ) {

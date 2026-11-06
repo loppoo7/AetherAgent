@@ -111,7 +111,7 @@ class SftpGatewayImpl @Inject constructor(
             })
             ssh.connect(normalizeSftpHost(host), port)
             connected = true
-            ssh.authPassword("${username.trim()}.$serverId", password)
+            ssh.authPassword(loginUsername(username, serverId), password)
             authenticated = true
             ssh.newSFTPClient().use { client -> client.ls(SERVER_ROOT) }
         } catch (e: Exception) {
@@ -136,6 +136,12 @@ class SftpGatewayImpl @Inject constructor(
         } finally {
             runCatching { ssh.disconnect() }
         }
+    }
+
+    private fun loginUsername(username: String, serverId: String): String {
+        val normalized = username.trim()
+        val suffix = ".$serverId"
+        return if (normalized.endsWith(suffix, ignoreCase = true)) normalized else normalized + suffix
     }
 
     /**
@@ -167,7 +173,7 @@ class SftpGatewayImpl @Inject constructor(
                     override fun findExistingAlgorithms(hostname: String, port: Int): List<String> = emptyList()
                 })
                 ssh.connect(normalizeSftpHost(s.sftpHost), s.sftpPort)
-                ssh.authPassword("${s.sftpUser.trim()}.$serverId", s.sftpPassword)
+                ssh.authPassword(loginUsername(s.sftpUser, serverId), s.sftpPassword)
                 ssh.newSFTPClient().use { client -> block(client) }
             } catch (e: Exception) {
                 if (mismatch) {

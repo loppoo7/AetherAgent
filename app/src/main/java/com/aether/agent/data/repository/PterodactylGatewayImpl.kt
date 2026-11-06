@@ -72,8 +72,11 @@ class PterodactylGatewayImpl @Inject constructor(
     override suspend fun testConnection(panelUrl: String, apiKey: String): List<PteroServer> = readableErrors {
         val url = panelUrl.trim().trimEnd('/')
         val key = apiKey.trim()
+        require(url.isNotBlank()) {
+            "URL web panel Pterodactyl belum diisi. Isi kolom URL web panel di bagian Client API; alamat node SFTP di atas berbeda."
+        }
         require(url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true)) {
-            "URL panel harus diawali http:// atau https://."
+            "Format URL web panel tidak valid. Awali dengan https:// atau http://, misalnya https://panel.domain.com. Jangan masukkan URL node SFTP di kolom ini."
         }
         require(key.isNotBlank()) { "Client API Key belum diisi." }
         requestServers(url, key)
