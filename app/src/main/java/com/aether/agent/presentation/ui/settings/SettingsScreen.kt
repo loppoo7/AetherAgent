@@ -12,10 +12,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +32,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,6 +75,14 @@ import com.aether.agent.presentation.viewmodel.SftpCheckState
 
 private val SuccessGreen = Color(0xFF16A34A)
 
+private enum class SettingsTab(val label: String) {
+    PROVIDER("Provider AI"),
+    UMUM("Umum"),
+    GITHUB("GitHub"),
+    PANEL("Panel"),
+    SFTP("SFTP"),
+}
+
 @Composable
 fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val current by viewModel.settings.collectAsState()
@@ -76,6 +90,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
     val clientApiCheck by viewModel.clientApiCheck.collectAsState()
     val sftpCheck by viewModel.sftpCheck.collectAsState()
     var draft by remember(current) { mutableStateOf(current) }
+    var tab by rememberSaveable { mutableStateOf(SettingsTab.PROVIDER) }
 
     /** Perubahan yang langsung disimpan (dipakai untuk bagian Panel dan SFTP). */
     fun persistDraft(updated: AgentSettings) {
@@ -94,77 +109,95 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
         Modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(22.dp),
+            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             IconAction(AetherIcon.Back, "Kembali", onBack)
             Text("Pengaturan", style = MaterialTheme.typography.headlineSmall)
         }
 
-        ProviderSection(
-            draft = draft,
-            onChange = { draft = it },
-        )
-
-        GithubSection(
-            draft = draft,
-            current = current,
-            login = login,
-            onChange = { draft = it },
-            onConnect = viewModel::connectGithub,
-            onCancel = viewModel::cancelConnect,
-            onDisconnect = viewModel::disconnectGithub,
-        )
-
-        GeneralSection(
-            draft = draft,
-            onChange = { draft = it },
-        )
-
-        PanelSection(
-            draft = draft,
-            check = clientApiCheck,
-            onChange = ::persistDraft,
-            onTest = { viewModel.testClientApi(draft) },
-        )
-
-        SftpSection(
-            draft = draft,
-            check = sftpCheck,
-            onChange = ::sftpChanged,
-            onConnect = { viewModel.connectSftp(draft) },
-            onTrust = { fingerprint ->
-                val updated = draft.copy(sftpHostKey = fingerprint)
-                persistDraft(updated)
-                viewModel.trustAndConnect(updated)
-            },
-            onForget = {
-                persistDraft(draft.copy(sftpHostKey = ""))
-                viewModel.resetSftpCheck()
-            },
-        )
-
-        SettingsSection("Tentang") {
-            Text("AetherAgent · versi 1.0.0", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "Dibangun dengan Jetpack Compose. Lisensi open source.",
-                style = MaterialTheme.typography.bodySmall,
-                color = LocalAetherPalette.current.muted,
-            )
+        ScrollableTabRow(selectedTabIndex = tab.ordinal, edgePadding = 8.dp) {
+            SettingsTab.entries.forEach { t ->
+                Tab(
+                    selected = tab == t,
+                    onClick = { tab = t },
+                    text = { Text(t.label) },
+                )
+            }
         }
 
-        Button(
-            onClick = { viewModel.save(draft, onBack) },
-            modifier = Modifier.fillMaxWidth(),
+        Column(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
-            Text("Simpan")
+            when (tab) {
+                SettingsTab.PROVIDER -> ProviderSection(
+                    draft = draft,
+                    onChange = { draft = it },
+                )
+                SettingsTab.UMUM -> GeneralSection(
+                    draft = draft,
+                    onChange = { draft = it },
+                )
+                SettingsTab.GITHUB -> GithubSection(
+                    draft = draft,
+                    current = current,
+                    login = login,
+                    onChange = { draft = it },
+                    onConnect = viewModel::connectGithub,
+                    onCancel = viewModel::cancelConnect,
+                    onDisconnect = viewModel::disconnectGithub,
+                )
+                SettingsTab.PANEL -> PanelSection(
+                    draft = draft,
+                    check = clientApiCheck,
+                    onChange = ::persistDraft,
+                    onTest = { viewModel.testClientApi(draft) },
+                )
+                SettingsTab.SFTP -> SftpSection(
+                    draft = draft,
+                    check = sftpCheck,
+                    onChange = ::sftpChanged,
+                    onConnect = { viewModel.connectSftp(draft) },
+                    onTrust = { fingerprint ->
+                        val updated = draft.copy(sftpHostKey = fingerprint)
+                        persistDraft(updated)
+                        viewModel.trustAndConnect(updated)
+                    },
+                    onForget = {
+                        persistDraft(draft.copy(sftpHostKey = ""))
+                        viewModel.resetSftpCheck()
+                    },
+                )
+            }
+
+            SettingsSection("Tentang aplikasi") {
+                Text("AetherAgent · versi 1.0.0", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Dibangun dengan Jetpack Compose. Lisensi open source.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LocalAetherPalette.current.muted,
+                )
+            }
+
+            Button(
+                onClick = { viewModel.save(draft, onBack) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Simpan")
+            }
+            Spacer(Modifier.height(24.dp))
         }
-        Spacer(Modifier.height(24.dp))
     }
 }
+
 
 /* ---------------------------------------------------------------------------------------------
  * Bagian: Provider AI
