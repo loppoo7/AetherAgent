@@ -1,5 +1,6 @@
 package com.aether.agent.presentation.ui.settings
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.isImeVisible
 
 import androidx.compose.foundation.BorderStroke
@@ -86,6 +87,7 @@ private enum class SettingsTab(val label: String) {
     SFTP("SFTP"),
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val current by viewModel.settings.collectAsState()

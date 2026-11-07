@@ -1,5 +1,6 @@
 package com.aether.agent.presentation.ui.files
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.isImeVisible
 
 import com.aether.agent.presentation.components.ThinkingSteps
@@ -77,6 +78,7 @@ import com.aether.agent.presentation.components.AetherIcon
 import com.aether.agent.presentation.components.IconAction
 import com.aether.agent.presentation.components.findMatches
 import com.aether.agent.presentation.components.highlightCode
+import com.aether.agent.presentation.components.highlightCodeAround
 import com.aether.agent.presentation.ui.theme.AetherMono
 import com.aether.agent.presentation.ui.theme.LocalAetherPalette
 import com.aether.agent.presentation.ui.theme.Terracotta
@@ -89,6 +91,7 @@ private val EditorPadTop = 10.dp
 private val CursorMargin = 24.dp
 private const val MAX_HIGHLIGHT = 300
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FileEditorScreen(
     onBack: () -> Unit,
@@ -97,6 +100,9 @@ fun FileEditorScreen(
     val state by viewModel.state.collectAsState()
     val palette = LocalAetherPalette.current
     val density = LocalDensity.current
+    // Konversi dp ke px dilakukan sekali di sini, di dalam scope Density.
+    val padTopPx = with(density) { EditorPadTop.toPx() }
+    val cursorMarginPx = with(density) { CursorMargin.toPx() }
     val textMeasurer = rememberTextMeasurer()
     val numberStyle = codeStyle.copy(fontSize = 11.sp, color = palette.muted)
 
@@ -129,10 +135,14 @@ fun FileEditorScreen(
     val visibleMatches = if (matches.size <= MAX_HIGHLIGHT) matches
         else matches.subList(windowStart, windowStart + MAX_HIGHLIGHT)
     val visibleCurrent = if (safeCurrent < 0) -1 else safeCurrent - windowStart
-    val transformation = remember(visibleMatches, visibleCurrent) {
+    val cursor = field.selection.end
+    val transformation = remember(visibleMatches, visibleCurrent, cursor) {
         object : VisualTransformation {
             override fun filter(text: AnnotatedString): TransformedText =
-                TransformedText(highlightCode(text.text, visibleMatches, visibleCurrent), OffsetMapping.Identity)
+                TransformedText(
+                    highlightCodeAround(text.text, cursor, visibleMatches, visibleCurrent),
+                    OffsetMapping.Identity,
+                )
         }
     }
 
@@ -144,7 +154,7 @@ fun FileEditorScreen(
         if (navTick == 0 || safeCurrent < 0) return@LaunchedEffect
         val line = lineOf(field.text, matches[safeCurrent].first)
         val viewport = with(density) { 160.dp.toPx() }
-        val target = EditorPadTop.toPx() + line * lineHeightPx - viewport
+        val target = padTopPx + line * lineHeightPx - viewport
         vScroll.animateScrollTo(target.coerceAtLeast(0f).roundToInt())
     }
 
@@ -152,8 +162,8 @@ fun FileEditorScreen(
     LaunchedEffect(field.selection, viewportPx, lineHeightPx) {
         if (viewportPx == 0) return@LaunchedEffect
         val line = lineOf(field.text, field.selection.end)
-        val padTop = EditorPadTop.toPx()
-        val margin = with(density) { CursorMargin.toPx() }
+        val padTop = padTopPx
+        val margin = cursorMarginPx
         val top = padTop + line * lineHeightPx
         val bottom = top + lineHeightPx
         val view = vScroll.value.toFloat()
@@ -259,7 +269,7 @@ fun FileEditorScreen(
             else -> {
                 // Tinggi konten editor, dipakai agar kolom nomor baris punya tinggi scroll yang sama.
                 val contentHeight = with(density) {
-                    (lineCount * lineHeightPx + EditorPadTop.toPx() * 2).toDp()
+                    with(density) { (lineCount * lineHeightPx + padTopPx * 2).toDp() }
                 }
                 Row(Modifier.weight(if (showChat) 0.55f else 1f).fillMaxWidth()) {
                     // Kolom nomor baris: tidak ikut digeser ke samping, dan ikut bergerak naik-turun

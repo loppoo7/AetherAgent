@@ -9,6 +9,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.SecurityUtils
@@ -142,6 +144,16 @@ class SftpGatewayImpl @Inject constructor(
     }
 
     /** Semua operasi file wajib memakai fingerprint yang sudah disetujui di Pengaturan. */
+    /** Satu sesi SFTP dipakai ulang. [key] berisi host, port, user, server, fingerprint, dan hash password. */
+    private class Session(val key: String, val ssh: SSHClient, val sftp: SFTPClient)
+
+    private val sessionLock = Mutex()
+    private var session: Session? = null
+
+    /**
+     * Semua operasi file lewat satu sesi bersama, dijalankan satu per satu.
+     * Jika koneksi putus (biasanya karena idle), sesi dibuka ulang sekali lalu operasi dicoba lagi.
+     */
     private suspend fun <T> withSftp(serverId: String, block: (SFTPClient) -> T): T = withContext(Dispatchers.IO) {
         val s = settings.observeSettings().first()
         require(s.sftpHost.isNotBlank() && s.sftpUser.isNotBlank() && s.sftpPassword.isNotBlank()) {
@@ -150,33 +162,79 @@ class SftpGatewayImpl @Inject constructor(
         require(s.sftpHostKey.isNotBlank()) {
             "Fingerprint SFTP belum disetujui. Buka Pengaturan, bagian SFTP, lalu tekan Baca fingerprint."
         }
+        val key = listOf(
+            s.sftpHost.trim(), portOf(s.sftpPort), s.sftpUser.trim(), serverId, s.sftpHostKey, s.sftpPassword.hashCode(),
+        ).joinToString("|")
+
+        sessionLock.withLock {
+            val current = session
+            val active = if (current != null && current.key == key && current.ssh.isConnected && current.ssh.isAuthenticated) {
+                current
+            } else {
+                closeSession()
+                openSession(s.sftpHost, s.sftpPort, s.sftpUser, s.sftpPassword, s.sftpHostKey, serverId, key)
+            }
+            try {
+                block(active.sftp)
+            } catch (e: Exception) {
+                if (e is IllegalStateException || e is IllegalArgumentException) throw e
+                if (active.ssh.isConnected) throw IllegalStateException(failure(Stage.FILES, e), e)
+                // Koneksi sudah putus: buka ulang sekali dan coba lagi.
+                closeSession()
+                val fresh = openSession(s.sftpHost, s.sftpPort, s.sftpUser, s.sftpPassword, s.sftpHostKey, serverId, key)
+                try {
+                    block(fresh.sftp)
+                } catch (retryError: Exception) {
+                    closeSession()
+                    if (retryError is IllegalStateException || retryError is IllegalArgumentException) throw retryError
+                    throw IllegalStateException(failure(Stage.FILES, retryError), retryError)
+                }
+            }
+        }
+    }
+
+    private fun openSession(
+        host: String,
+        port: Int,
+        user: String,
+        password: String,
+        pinned: String,
+        serverId: String,
+        key: String,
+    ): Session {
         var mismatch = false
-        val ssh = SSHClient()
         var stage = Stage.CONNECT
+        val ssh = SSHClient()
         try {
             configure(ssh)
-            ssh.addHostKeyVerifier(pinnedVerifier(s.sftpHostKey) { mismatch = true })
-            ssh.connect(normalizeHost(s.sftpHost), portOf(s.sftpPort))
+            ssh.addHostKeyVerifier(pinnedVerifier(pinned) { mismatch = true })
+            ssh.connect(normalizeHost(host), portOf(port))
             stage = Stage.AUTH
             try {
-                ssh.authPassword(loginUsername(s.sftpUser, serverId), s.sftpPassword)
+                ssh.authPassword(loginUsername(user, serverId), password)
             } catch (e: UserAuthException) {
                 throw IllegalStateException("Login SFTP ditolak. Periksa username panel, password, dan ID server.", e)
             }
             stage = Stage.SUBSYSTEM
-            ssh.newSFTPClient().use { client ->
-                stage = Stage.FILES
-                block(client)
-            }
+            val opened = Session(key, ssh, ssh.newSFTPClient())
+            session = opened
+            return opened
         } catch (e: Exception) {
+            runCatching { ssh.disconnect() }
             when {
                 mismatch -> throw IllegalStateException("Fingerprint server berubah. Koneksi dibatalkan demi keamanan.", e)
                 e is IllegalStateException || e is IllegalArgumentException -> throw e
                 else -> throw IllegalStateException(failure(stage, e), e)
             }
-        } finally {
-            runCatching { ssh.disconnect() }
         }
+    }
+
+    private fun closeSession() {
+        session?.let { old ->
+            runCatching { old.sftp.close() }
+            runCatching { old.ssh.disconnect() }
+        }
+        session = null
     }
 
     private fun configure(ssh: SSHClient) {
