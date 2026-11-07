@@ -1,5 +1,7 @@
 package com.aether.agent.data.repository
 
+import com.aether.agent.domain.model.AgentSettings
+
 import kotlinx.coroutines.CancellationException
 import com.aether.agent.domain.agent_tools.LineDiff
 
@@ -44,6 +46,19 @@ class GithubGatewayImpl @Inject constructor(
         return GithubConfig(s.githubToken, owner, repo, target.substringAfter('|', "").ifBlank { s.githubBranch })
     }
 
+    /** Target yang dipakai. Fallback ke owner/repo tunggal hanya kalau keduanya sudah terisi. */
+    private fun targetsOf(s: AgentSettings): Set<String> {
+        val explicit = s.githubTargets.filter { isValidTarget(it) }.toSet()
+        if (explicit.isNotEmpty()) return explicit
+        return if (s.githubOwner.isNotBlank() && s.githubRepo.isNotBlank())
+            setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") else emptySet()
+    }
+
+    private fun isValidTarget(t: String): Boolean {
+        val full = t.substringBefore('|').trim()
+        return full.substringBefore('/').isNotBlank() && full.substringAfter('/', "").isNotBlank()
+    }
+
     private fun decodeFile(file: JsonObject?): String? {
         if (file == null) return null
         val encoded = file["content"]?.jsonPrimitive?.contentOrNull.orEmpty().replace("\n", "")
@@ -86,7 +101,7 @@ class GithubGatewayImpl @Inject constructor(
 
     override suspend fun listFiles(): List<String> = readableErrors {
         val s = currentSettings()
-        val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
+        val targets = targetsOf(s)
         val allFiles = mutableListOf<String>()
         for (target in targets.sorted()) {
             val label = target.substringBefore('|')
@@ -105,7 +120,7 @@ class GithubGatewayImpl @Inject constructor(
 
     override suspend fun readFileAcrossTargets(path: String): String = readableErrors {
         val s = currentSettings()
-        val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
+        val targets = targetsOf(s)
         val sections = mutableListOf<String>()
         for (target in targets.sorted()) {
             val label = target.substringBefore('|')
@@ -117,7 +132,7 @@ class GithubGatewayImpl @Inject constructor(
 
     override suspend fun writeFile(path: String, content: String, message: String): String = readableErrors {
         val s = currentSettings()
-        val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
+        val targets = targetsOf(s)
         require(targets.isNotEmpty()) { "Pilih repository GitHub terlebih dahulu." }
         val done = mutableListOf<String>()
         val failed = mutableListOf<String>()
@@ -140,7 +155,7 @@ class GithubGatewayImpl @Inject constructor(
 
     override suspend fun deleteFile(path: String, message: String): String = readableErrors {
         val s = currentSettings()
-        val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
+        val targets = targetsOf(s)
         require(targets.isNotEmpty()) { "Pilih repository GitHub terlebih dahulu." }
         val done = mutableListOf<String>()
         val failed = mutableListOf<String>()
@@ -163,7 +178,7 @@ class GithubGatewayImpl @Inject constructor(
 
     override suspend fun previewChange(path: String, newContent: String): String = readableErrors {
         val s = currentSettings()
-        val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
+        val targets = targetsOf(s)
         val sections = mutableListOf<String>()
         for (target in targets.sorted()) {
             val c = configForTarget(target)

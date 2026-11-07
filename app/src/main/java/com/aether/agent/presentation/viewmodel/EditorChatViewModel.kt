@@ -1,5 +1,7 @@
 package com.aether.agent.presentation.viewmodel
 
+import com.aether.agent.domain.agent.ToolScope
+
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -62,7 +64,7 @@ class EditorChatViewModel @Inject constructor(
             try {
                 chat.ensureSession(sessionId, "Editor: " + path.substringAfterLast('/'))
                 val context = listOf(AttachedFileContext("editor", path, fileText))
-                runAgent(sessionId, input, null, context).collect { event ->
+                runAgent(sessionId, input, editorRoleInstruction(), context, ToolScope.SERVER_ONLY).collect { event ->
                     when (event) {
                         is AgentEvent.ActionStarted -> {
                             thinking.actionStarted(event.callId, event.title)
@@ -93,6 +95,13 @@ class EditorChatViewModel @Inject constructor(
             }
         }
     }
+
+    /** Memberi tahu model asal file, supaya tidak mencari di repository GitHub. */
+    private fun editorRoleInstruction(): String =
+        "Konteks: file ini ada di server Pterodactyl dengan ID \"$serverId\" dan path \"$path\". " +
+            "Isi terbaru file, termasuk perubahan yang belum disimpan, dilampirkan di pesan. " +
+            "Untuk membaca atau mengubah file ini, gunakan tool server dengan server=\"$serverId\". " +
+            "Jangan membaca atau menulis repository GitHub."
 
     fun resolveApproval(approved: Boolean) {
         val pending = _approval.value ?: return
