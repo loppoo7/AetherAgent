@@ -1,5 +1,7 @@
 package com.aether.agent.presentation.ui.files
 
+import androidx.compose.foundation.layout.isImeVisible
+
 import com.aether.agent.presentation.components.ThinkingSteps
 
 import androidx.activity.compose.BackHandler
@@ -59,7 +61,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -86,6 +87,7 @@ private val codeStyle = TextStyle(fontFamily = AetherMono, fontSize = 13.sp, lin
 private val GutterWidth = 44.dp
 private val EditorPadTop = 10.dp
 private val CursorMargin = 24.dp
+private const val MAX_HIGHLIGHT = 300
 
 @Composable
 fun FileEditorScreen(
@@ -104,7 +106,6 @@ fun FileEditorScreen(
     var query by remember { mutableStateOf("") }
     var current by remember { mutableIntStateOf(0) }
     var navTick by remember { mutableIntStateOf(0) }
-    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     var viewportPx by remember { mutableIntStateOf(0) }
     var confirmDiscard by remember { mutableStateOf(false) }
     var showChat by rememberSaveable { mutableStateOf(false) }
@@ -122,34 +123,39 @@ fun FileEditorScreen(
 
     val matches = remember(field.text, query) { findMatches(field.text, query) }
     val safeCurrent = if (matches.isEmpty()) -1 else current.coerceIn(0, matches.lastIndex)
-    val transformation = remember(matches, safeCurrent) {
+    // Hanya kecocokan di sekitar yang sedang dipilih yang diwarnai. Ribuan span sekaligus membuat pewarnaan berat.
+    val windowStart = if (matches.size <= MAX_HIGHLIGHT) 0
+        else (safeCurrent - MAX_HIGHLIGHT / 2).coerceIn(0, matches.size - MAX_HIGHLIGHT)
+    val visibleMatches = if (matches.size <= MAX_HIGHLIGHT) matches
+        else matches.subList(windowStart, windowStart + MAX_HIGHLIGHT)
+    val visibleCurrent = if (safeCurrent < 0) -1 else safeCurrent - windowStart
+    val transformation = remember(visibleMatches, visibleCurrent) {
         object : VisualTransformation {
             override fun filter(text: AnnotatedString): TransformedText =
-                TransformedText(highlightCode(text.text, matches, safeCurrent), OffsetMapping.Identity)
+                TransformedText(highlightCode(text.text, visibleMatches, visibleCurrent), OffsetMapping.Identity)
         }
     }
 
-    // Gulir ke hasil pencarian yang dipilih. Hanya jalan saat pengguna pindah hasil, bukan saat mengetik.
+    val lineHeightPx = with(density) { codeStyle.lineHeight.toPx() }
+    val lineCount = remember(field.text) { field.text.count { it == '\n' } + 1 }
+
+    // Gulir ke hasil pencarian. Posisi baris dihitung dari teks, tanpa menyimpan layout.
     LaunchedEffect(navTick) {
         if (navTick == 0 || safeCurrent < 0) return@LaunchedEffect
-        val l = layout ?: return@LaunchedEffect
-        val line = l.getLineForOffset(matches[safeCurrent].first)
-        val lineTop = l.getLineTop(line)
-        val offsetTop = with(density) { EditorPadTop.toPx() }
+        val line = lineOf(field.text, matches[safeCurrent].first)
         val viewport = with(density) { 160.dp.toPx() }
-        vScroll.animateScrollTo((offsetTop + lineTop - viewport).coerceAtLeast(0f).roundToInt())
+        val target = EditorPadTop.toPx() + line * lineHeightPx - viewport
+        vScroll.animateScrollTo(target.coerceAtLeast(0f).roundToInt())
     }
 
-    // Kursor selalu digulir agar tetap terlihat, termasuk saat keyboard muncul dan menutupi layar.
-    LaunchedEffect(field.selection, layout, viewportPx) {
-        val l = layout ?: return@LaunchedEffect
+    // Kursor selalu digulir agar tetap terlihat, termasuk saat keyboard muncul.
+    LaunchedEffect(field.selection, viewportPx, lineHeightPx) {
         if (viewportPx == 0) return@LaunchedEffect
-        val offset = field.selection.end.coerceIn(0, field.text.length)
-        val rect = l.getCursorRect(offset)
-        val padTop = with(density) { EditorPadTop.toPx() }
+        val line = lineOf(field.text, field.selection.end)
+        val padTop = EditorPadTop.toPx()
         val margin = with(density) { CursorMargin.toPx() }
-        val top = padTop + rect.top
-        val bottom = padTop + rect.bottom
+        val top = padTop + line * lineHeightPx
+        val bottom = top + lineHeightPx
         val view = vScroll.value.toFloat()
         val viewH = viewportPx.toFloat()
         val target = when {
@@ -174,7 +180,13 @@ fun FileEditorScreen(
 
     BackHandler(enabled = state.dirty) { confirmDiscard = true }
 
-    Column(Modifier.fillMaxSize().statusBarsPadding().windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))) {
+    val imeVisible = WindowInsets.isImeVisible
+    Column(
+        Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .windowInsetsPadding(if (imeVisible) WindowInsets.ime.union(WindowInsets.navigationBars) else WindowInsets.navigationBars),
+    ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -247,7 +259,7 @@ fun FileEditorScreen(
             else -> {
                 // Tinggi konten editor, dipakai agar kolom nomor baris punya tinggi scroll yang sama.
                 val contentHeight = with(density) {
-                    ((layout?.size?.height ?: 0) + EditorPadTop.toPx() * 2).toDp()
+                    (lineCount * lineHeightPx + EditorPadTop.toPx() * 2).toDp()
                 }
                 Row(Modifier.weight(if (showChat) 0.55f else 1f).fillMaxWidth()) {
                     // Kolom nomor baris: tidak ikut digeser ke samping, dan ikut bergerak naik-turun
@@ -260,22 +272,16 @@ fun FileEditorScreen(
                             .verticalScroll(vScroll),
                     ) {
                         Canvas(Modifier.width(GutterWidth).height(contentHeight)) {
-                            val l = layout ?: return@Canvas
-                            if (l.lineCount == 0) return@Canvas
+                            if (viewportPx == 0) return@Canvas
                             val padTop = EditorPadTop.toPx()
-                            val firstY = (vScroll.value - padTop).coerceAtLeast(0f)
-                            val lastY = (vScroll.value + viewportPx - padTop).coerceAtLeast(0f)
-                            val first = l.getLineForVerticalPosition(firstY)
-                            val last = l.getLineForVerticalPosition(lastY).coerceAtMost(l.lineCount - 1)
+                            val first = ((vScroll.value - padTop) / lineHeightPx).toInt().coerceIn(0, lineCount - 1)
+                            val last = ((vScroll.value + viewportPx - padTop) / lineHeightPx).toInt().coerceIn(0, lineCount - 1)
                             val rightEdge = GutterWidth.toPx() - 8.dp.toPx()
                             for (line in first..last) {
                                 val measured = textMeasurer.measure((line + 1).toString(), numberStyle)
                                 drawText(
                                     measured,
-                                    topLeft = Offset(
-                                        rightEdge - measured.size.width,
-                                        padTop + l.getLineTop(line),
-                                    ),
+                                    topLeft = Offset(rightEdge - measured.size.width, padTop + line * lineHeightPx),
                                 )
                             }
                         }
@@ -299,7 +305,6 @@ fun FileEditorScreen(
                                 textStyle = codeStyle.copy(color = palette.codeText),
                                 cursorBrush = SolidColor(Terracotta),
                                 visualTransformation = transformation,
-                                onTextLayout = { layout = it },
                                 modifier = Modifier
                                     .background(palette.codeBg)
                                     .padding(start = 8.dp, end = 12.dp, top = EditorPadTop, bottom = EditorPadTop),
@@ -504,3 +509,7 @@ private fun EditorChatPanel(
         )
     }
 }
+
+/** Nomor baris (mulai dari 0) untuk posisi karakter tertentu. */
+private fun lineOf(text: String, offset: Int): Int =
+    text.substring(0, offset.coerceIn(0, text.length)).count { it == '\n' }

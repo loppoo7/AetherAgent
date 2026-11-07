@@ -1,5 +1,7 @@
 package com.aether.agent.presentation.ui.settings
 
+import androidx.compose.foundation.layout.isImeVisible
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -106,11 +108,12 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
         persistDraft(if (endpointChanged) updated.copy(sftpHostKey = "") else updated)
     }
 
+    val imeVisible = WindowInsets.isImeVisible
     Column(
         Modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
+            .windowInsetsPadding(if (imeVisible) WindowInsets.ime.union(WindowInsets.navigationBars) else WindowInsets.navigationBars),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
