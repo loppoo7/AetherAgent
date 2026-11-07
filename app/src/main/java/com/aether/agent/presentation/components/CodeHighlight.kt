@@ -63,13 +63,12 @@ fun findMatches(text: String, query: String): List<IntRange> {
 private const val HIGHLIGHT_RADIUS_LINES = 300
 
 /**
- * Pewarnaan sintaks hanya untuk area sekitar kursor (sekitar 600 baris). Di luar itu teks tetap polos.
- * Dengan begitu, mengetik di file besar tidak lagi menjalankan regex ke seluruh isi file.
+ * Pewarnaan sintaks hanya untuk sekitar [centerLine] (±300 baris). Di luar itu teks tetap polos.
+ * Hasilnya stabil selama pusat window tidak berubah, jadi menyeret seleksi tidak memicu pewarnaan ulang.
  */
-fun highlightCodeAround(text: String, cursor: Int, matches: List<IntRange>, current: Int): AnnotatedString {
-    val cursorLine = lineIndexOf(text, cursor)
-    val from = lineStart(text, (cursorLine - HIGHLIGHT_RADIUS_LINES).coerceAtLeast(0))
-    val to = lineStart(text, cursorLine + HIGHLIGHT_RADIUS_LINES + 1)
+fun highlightCodeAroundLine(text: String, centerLine: Int, matches: List<IntRange>, current: Int): AnnotatedString {
+    val from = lineStart(text, (centerLine - HIGHLIGHT_RADIUS_LINES).coerceAtLeast(0))
+    val to = lineStart(text, centerLine + HIGHLIGHT_RADIUS_LINES + 1)
     val slice = text.substring(from, to)
     val inWindow = matches.filter { it.last >= from && it.first < to }
     val shifted = inWindow.map { (it.first - from)..(it.last - from) }
@@ -80,14 +79,6 @@ fun highlightCodeAround(text: String, cursor: Int, matches: List<IntRange>, curr
         append(text)
         styled.spanStyles.forEach { span -> addStyle(span.item, from + span.start, from + span.end) }
     }
-}
-
-/** Nomor baris (mulai 0) dari offset karakter. */
-private fun lineIndexOf(text: String, offset: Int): Int {
-    val end = offset.coerceIn(0, text.length)
-    var line = 0
-    for (i in 0 until end) if (text[i] == '\n') line++
-    return line
 }
 
 /** Offset karakter awal baris [line]. Mengembalikan panjang teks jika baris melebihi isi. */

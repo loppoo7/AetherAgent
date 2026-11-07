@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -78,7 +79,7 @@ import com.aether.agent.presentation.components.AetherIcon
 import com.aether.agent.presentation.components.IconAction
 import com.aether.agent.presentation.components.findMatches
 import com.aether.agent.presentation.components.highlightCode
-import com.aether.agent.presentation.components.highlightCodeAround
+import com.aether.agent.presentation.components.highlightCodeAroundLine
 import com.aether.agent.presentation.ui.theme.AetherMono
 import com.aether.agent.presentation.ui.theme.LocalAetherPalette
 import com.aether.agent.presentation.ui.theme.Terracotta
@@ -88,6 +89,7 @@ import kotlin.math.roundToInt
 private val codeStyle = TextStyle(fontFamily = AetherMono, fontSize = 13.sp, lineHeight = 20.sp)
 private val GutterWidth = 44.dp
 private val EditorPadTop = 10.dp
+private const val CURSOR_BUCKET_LINES = 200
 private val CursorMargin = 24.dp
 private const val MAX_HIGHLIGHT = 300
 
@@ -105,6 +107,8 @@ fun FileEditorScreen(
     val cursorMarginPx = with(density) { CursorMargin.toPx() }
     val textMeasurer = rememberTextMeasurer()
     val numberStyle = codeStyle.copy(fontSize = 11.sp, color = palette.muted)
+    // Hasil ukur nomor baris disimpan, jadi saat menggulir tidak ada pengukuran ulang setiap frame.
+    val numberCache = remember(numberStyle) { HashMap<Int, TextLayoutResult>() }
 
     var field by remember { mutableStateOf(TextFieldValue("")) }
     var loaded by remember { mutableStateOf(false) }
@@ -135,12 +139,18 @@ fun FileEditorScreen(
     val visibleMatches = if (matches.size <= MAX_HIGHLIGHT) matches
         else matches.subList(windowStart, windowStart + MAX_HIGHLIGHT)
     val visibleCurrent = if (safeCurrent < 0) -1 else safeCurrent - windowStart
-    val cursor = field.selection.end
-    val transformation = remember(visibleMatches, visibleCurrent, cursor) {
+    // Pewarnaan dihitung ulang hanya saat kursor pindah ke blok baris lain, bukan setiap frame seleksi.
+    val cursorBucket = lineOf(field.text, field.selection.end) / CURSOR_BUCKET_LINES
+    val transformation = remember(visibleMatches, visibleCurrent, cursorBucket) {
         object : VisualTransformation {
             override fun filter(text: AnnotatedString): TransformedText =
                 TransformedText(
-                    highlightCodeAround(text.text, cursor, visibleMatches, visibleCurrent),
+                    highlightCodeAroundLine(
+                        text.text,
+                        cursorBucket * CURSOR_BUCKET_LINES + CURSOR_BUCKET_LINES / 2,
+                        visibleMatches,
+                        visibleCurrent,
+                    ),
                     OffsetMapping.Identity,
                 )
         }
@@ -288,7 +298,9 @@ fun FileEditorScreen(
                             val last = ((vScroll.value + viewportPx - padTop) / lineHeightPx).toInt().coerceIn(0, lineCount - 1)
                             val rightEdge = GutterWidth.toPx() - 8.dp.toPx()
                             for (line in first..last) {
-                                val measured = textMeasurer.measure((line + 1).toString(), numberStyle)
+                                val measured = numberCache.getOrPut(line + 1) {
+                                    textMeasurer.measure((line + 1).toString(), numberStyle)
+                                }
                                 drawText(
                                     measured,
                                     topLeft = Offset(rightEdge - measured.size.width, padTop + line * lineHeightPx),
