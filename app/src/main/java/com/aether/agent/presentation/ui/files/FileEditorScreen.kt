@@ -39,6 +39,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -178,6 +179,8 @@ fun FileEditorScreen(
     var viewportPx by remember { mutableIntStateOf(0) }
     var confirmDiscard by remember { mutableStateOf(false) }
     var showChat by rememberSaveable { mutableStateOf(false) }
+    // Auto indent mati secara default: Enter hanya menyisipkan baris baru, tanpa menambah spasi.
+    var autoIndent by rememberSaveable { mutableStateOf(false) }
     val chatVm: EditorChatViewModel = hiltViewModel()
 
     val vScroll = rememberScrollState()
@@ -391,7 +394,7 @@ fun FileEditorScreen(
                             BasicTextField(
                                 value = field,
                                 onValueChange = { raw ->
-                                    val next = applyAutoIndent(field, raw)
+                                    val next = if (autoIndent) applyAutoIndent(field, raw) else raw
                                     field = next
                                     history.record(next)
                                     viewModel.onTextChange(next.text)
@@ -426,6 +429,21 @@ fun FileEditorScreen(
                 color = palette.muted,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
+        }
+
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Auto indent", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Enter menyalin indentasi baris sebelumnya. Baris yang berakhir ':' menambah 4 spasi.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = palette.muted,
+                )
+            }
+            Switch(checked = autoIndent, onCheckedChange = { autoIndent = it })
         }
 
         Row(
