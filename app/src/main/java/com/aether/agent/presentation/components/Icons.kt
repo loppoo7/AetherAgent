@@ -34,7 +34,7 @@ import kotlin.math.sin
 enum class AetherIcon {
     Menu, More, Plus, ArrowUp, Stop, Check, Close, Minus,
     ChevronDown, ChevronRight, Back, Copy, Settings, Sparkle, Eye, EyeOff,
-    Folder, FileDoc, Search, Refresh, Power,
+    Folder, FileDoc, Search, Refresh, Power, Undo, Redo,
 }
 
 @Composable
@@ -105,6 +105,28 @@ private fun DrawScope.drawAetherIcon(icon: AetherIcon, tint: Color, s: Float, sw
         AetherIcon.Back -> {
             line(19f, 12f, 5f, 12f)
             poly(11f, 6f, 5f, 12f, 11f, 18f)
+        }
+        AetherIcon.Undo -> {
+            poly(9f, 5f, 4f, 10f, 9f, 15f)
+            drawPath(
+                path = Path().apply {
+                    moveTo(4f * s, 10f * s)
+                    cubicTo(14f * s, 10f * s, 20f * s, 13f * s, 20f * s, 20f * s)
+                },
+                color = tint,
+                style = stroke,
+            )
+        }
+        AetherIcon.Redo -> {
+            poly(15f, 5f, 20f, 10f, 15f, 15f)
+            drawPath(
+                path = Path().apply {
+                    moveTo(20f * s, 10f * s)
+                    cubicTo(10f * s, 10f * s, 4f * s, 13f * s, 4f * s, 20f * s)
+                },
+                color = tint,
+                style = stroke,
+            )
         }
         AetherIcon.Copy -> {
             poly(9f, 15f, 4f, 15f, 4f, 4f, 15f, 4f, 15f, 9f)

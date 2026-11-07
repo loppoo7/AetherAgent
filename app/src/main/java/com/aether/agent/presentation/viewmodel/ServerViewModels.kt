@@ -192,19 +192,27 @@ class FileEditorViewModel @Inject constructor(
     val serverId: String = checkNotNull(savedState.get<String>("server"))
     val path: String = checkNotNull(savedState.get<String>("path"))
 
+    /**
+     * Status yang jarang berubah. Teks editor TIDAK ada di sini: menyimpannya di StateFlow membuat
+     * seluruh layar recompose di setiap ketikan, yang menjadi penyebab utama lag.
+     */
     data class UiState(
         val loading: Boolean = true,
+        /** Isi terakhir yang berhasil dibuka atau disimpan. Dibandingkan dengan editor untuk "belum disimpan". */
         val original: String = "",
-        val text: String = "",
         val error: String? = null,
         val saving: Boolean = false,
         val notice: String? = null,
-    ) {
-        val dirty: Boolean get() = text != original
-    }
+    )
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
+
+    /** Teks terakhir yang diketik. Variabel biasa, jadi tidak memicu recompose; dipakai saat layar dibuat ulang (rotasi). */
+    private var draft: String? = null
+
+    /** Teks awal untuk editor: draft terakhir bila ada, jika tidak isi file asli. */
+    val startText: String get() = draft ?: _state.value.original
 
     init {
         load()
@@ -217,7 +225,7 @@ class FileEditorViewModel @Inject constructor(
                 if (content.length > MAX_CHARS) {
                     throw IllegalStateException("File terlalu besar untuk diedit di HP (di atas 1 MB).")
                 }
-                _state.value = UiState(loading = false, original = content, text = content)
+                _state.value = UiState(loading = false, original = content)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -227,7 +235,7 @@ class FileEditorViewModel @Inject constructor(
     }
 
     fun onTextChange(text: String) {
-        _state.value = _state.value.copy(text = text)
+        draft = text
     }
 
     /** Kirim isi editor saat ini ke kotak input Chat, lalu layar pindah ke Chat. */
@@ -236,25 +244,36 @@ class FileEditorViewModel @Inject constructor(
         handoff.offer("Tolong periksa file $path berikut:\n\n$fence\n$text\n$fence\n\n")
     }
 
-    /** Simpan. Jika [restart] true, server di-restart setelah file tersimpan. */
-    fun save(restart: Boolean) {
+    /**
+     * Simpan [text]. Jika [restart] true, server di-restart SETELAH file tersimpan.
+     * Sebelumnya restart yang gagal membuat file tampak belum tersimpan padahal sudah tertulis.
+     */
+    fun save(restart: Boolean, text: String) {
         if (_state.value.saving) return
+        draft = text
         _state.value = _state.value.copy(saving = true, notice = null)
         viewModelScope.launch {
             try {
-                val text = _state.value.text
                 sftp.writeFile(serverId, path, text)
-                if (restart) ptero.power(serverId, "restart")
-                _state.value = _state.value.copy(
-                    original = text,
-                    saving = false,
-                    notice = if (restart) "Tersimpan dan server di-restart" else "Tersimpan",
-                )
+                _state.value = _state.value.copy(original = text)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _state.value = _state.value.copy(saving = false, notice = "Gagal menyimpan: ${e.message}")
+                return@launch
             }
+            var notice = "Tersimpan"
+            if (restart) {
+                notice = try {
+                    ptero.power(serverId, "restart")
+                    "Tersimpan dan server di-restart"
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    "Tersimpan, tetapi restart gagal: ${e.message}"
+                }
+            }
+            _state.value = _state.value.copy(saving = false, notice = notice)
         }
     }
 
