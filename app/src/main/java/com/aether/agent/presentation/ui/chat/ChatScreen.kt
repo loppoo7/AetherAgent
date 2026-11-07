@@ -1,5 +1,7 @@
 package com.aether.agent.presentation.ui.chat
 
+import com.aether.agent.presentation.components.ThinkingSteps
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -65,7 +67,6 @@ import com.aether.agent.presentation.components.ChatModelRoleSelector
 import com.aether.agent.presentation.components.MultiFileContextPickerDialog
 import com.aether.agent.presentation.components.IconAction
 import com.aether.agent.presentation.components.RepoPickerDialog
-import com.aether.agent.presentation.components.ThinkingIndicator
 import com.aether.agent.presentation.ui.theme.LocalAetherPalette
 import com.aether.agent.presentation.ui.theme.Terracotta
 import com.aether.agent.presentation.viewmodel.CardState
@@ -152,7 +153,7 @@ fun ChatScreen(onSettings: () -> Unit, onFileServer: () -> Unit = {}, viewModel:
     }
     val repoSet = repoTargets.isNotEmpty()
 
-    val status = cards.lastOrNull { it.state == CardState.RUNNING }?.title
+    val steps by viewModel.thinkingSteps.collectAsState()
     val title = sessions.firstOrNull { it.id == activeId }?.title ?: "AetherAgent"
     val subtitle = if (repoTargets.isNotEmpty()) "${repoTargets.size} repo dipilih" else "Pilih repo"
 
@@ -220,7 +221,7 @@ fun ChatScreen(onSettings: () -> Unit, onFileServer: () -> Unit = {}, viewModel:
                 }
                 items(messages, key = { it.id }) { ChatBubble(it) }
                 items(cards, key = { it.id }) { AgentActionCard(it) }
-                if (running) item { ThinkingIndicator(status = status) }
+                if (running) item { ThinkingSteps(steps = steps, running = true) }
                 error?.let { message ->
                     item {
                         Text(

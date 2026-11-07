@@ -1,5 +1,12 @@
 package com.aether.agent.data.api.llm
 
+import io.ktor.client.request.preparePost
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.utils.io.readUTF8Line
+import kotlinx.serialization.json.intOrNull
+
+import io.ktor.client.plugins.timeout
+
 import com.aether.agent.domain.model.ARGS_PARSE_ERROR_KEY
 
 import com.aether.agent.data.api.readableErrors
@@ -35,6 +42,9 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
+/** Model reasoning bisa berpikir bermenit-menit. Tanpa streaming, batas ini berlaku untuk seluruh jawaban (20 menit). */
+private const val LLM_TIMEOUT_MS = 1_200_000L
+
 /** Satu gateway untuk dua gaya API: OpenAI-compatible (OpenAI, DeepSeek, OpenRouter) dan Anthropic Messages. */
 @Singleton
 class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGateway {
@@ -44,17 +54,19 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
         system: String,
         messages: List<LlmMessage>,
         tools: List<ToolSpec>,
+        onStatus: suspend (String) -> Unit,
     ): LlmReply {
         require(settings.apiKey.isNotBlank()) { "API key ${settings.provider.label} belum diisi di Pengaturan." }
+        onStatus("Berpikir…")
         return readableErrors {
             when (settings.provider.style) {
                 ApiStyle.OPENAI_COMPAT -> try {
-                    openAiCompatible(settings, system, messages, tools)
+                    openAiCompatible(settings, system, messages, tools, onStatus = onStatus)
                 } catch (e: ResponseException) {
                     val detail = runCatching { e.response.bodyAsText() }.getOrDefault("")
                     if (e.response.status.value == 400 && detail.contains("temperature", ignoreCase = true)) {
                         // Sebagian model menolak parameter temperature; ulangi tanpa itu.
-                        openAiCompatible(settings, system, messages, tools, useTemperature = false)
+                        openAiCompatible(settings, system, messages, tools, useTemperature = false, onStatus = onStatus)
                     } else {
                         throw IllegalStateException("HTTP ${e.response.status.value}: ${detail.take(300)}", e)
                     }
@@ -70,10 +82,12 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
         messages: List<LlmMessage>,
         tools: List<ToolSpec>,
         useTemperature: Boolean = true,
+        onStatus: suspend (String) -> Unit = {},
     ): LlmReply {
         val body = buildJsonObject {
             put("model", s.model)
             if (useTemperature) put("temperature", s.answerStyle.temperature)
+            put("stream", true)
             putJsonArray("messages") {
                 add(buildJsonObject { put("role", "system"); put("content", system) })
                 messages.forEach { add(it.toOpenAi()) }
@@ -93,27 +107,48 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
                 }
             }
         }
-        val res = http.post(s.provider.baseUrl.trimEnd('/') + "/chat/completions") {
+        val calls = mutableMapOf<Int, PartialCall>()
+        val text = StringBuilder()
+        var statusSent = false
+        http.preparePost(s.provider.baseUrl.trimEnd('/') + "/chat/completions") {
+            timeout { requestTimeoutMillis = LLM_TIMEOUT_MS; socketTimeoutMillis = LLM_TIMEOUT_MS }
             header(HttpHeaders.Authorization, "Bearer ${s.apiKey}")
             contentType(ContentType.Application.Json)
             setBody(body.toString())
-        }.body<JsonObject>()
+        }.execute { response ->
+            val channel = response.bodyAsChannel()
+            while (true) {
+                val line = channel.readUTF8Line() ?: break
+                if (!line.startsWith("data:")) continue
+                val payload = line.removePrefix("data:").trim()
+                if (payload == "[DONE]") break
+                val chunk = runCatching { Json.parseToJsonElement(payload).jsonObject }.getOrNull() ?: continue
+                val delta = chunk["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("delta")?.jsonObject ?: continue
 
-        val msg = res["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("message")?.jsonObject
-            ?: error("Respons tidak valid: $res")
-        val text = msg["content"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        val calls = msg["tool_calls"]?.jsonArray?.map { c ->
-            val o = c.jsonObject
-            val fn = (o["function"] ?: error("Respons tool call tidak lengkap.")).jsonObject
-            ToolCall(
-                id = (o["id"] ?: error("ID tool call kosong.")).jsonPrimitive.content,
-                name = (fn["name"] ?: error("Nama tool kosong.")).jsonPrimitive.content,
-                arguments = parseArgs(fn["arguments"]?.jsonPrimitive?.contentOrNull),
-                thoughtSignature = o["extra_content"]?.jsonObject?.get("google")?.jsonObject
-                    ?.get("thought_signature")?.jsonPrimitive?.contentOrNull,
-            )
-        }.orEmpty()
-        return LlmReply(text, calls)
+                delta["content"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotEmpty() }?.let { piece ->
+                    if (!statusSent) {
+                        statusSent = true
+                        onStatus("Menulis jawaban…")
+                    }
+                    text.append(piece)
+                }
+                delta["tool_calls"]?.jsonArray?.forEach { tc ->
+                    val o = tc.jsonObject
+                    val index = o["index"]?.jsonPrimitive?.intOrNull ?: 0
+                    val partial = calls.getOrPut(index) { PartialCall() }
+                    o["id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotEmpty() }?.let { partial.id = it }
+                    val fn = o["function"]?.jsonObject
+                    fn?.get("name")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotEmpty() && it != partial.name }?.let { name ->
+                        partial.name = name
+                        onStatus("Menyiapkan tool: $name")
+                    }
+                    fn?.get("arguments")?.jsonPrimitive?.contentOrNull?.let { partial.args.append(it) }
+                    o["extra_content"]?.jsonObject?.get("google")?.jsonObject?.get("thought_signature")
+                        ?.jsonPrimitive?.contentOrNull?.let { partial.signature = it }
+                }
+            }
+        }
+        return LlmReply(text.toString(), calls.toSortedMap().map { (index, p) -> p.toToolCall(index) })
     }
 
     private suspend fun anthropic(
@@ -141,6 +176,7 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
             }
         }
         val res = http.post(s.provider.baseUrl.trimEnd('/') + "/messages") {
+            timeout { requestTimeoutMillis = LLM_TIMEOUT_MS; socketTimeoutMillis = LLM_TIMEOUT_MS }
             header("x-api-key", s.apiKey)
             header("anthropic-version", "2023-06-01")
             contentType(ContentType.Application.Json)
@@ -245,7 +281,22 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
         put("text", text)
     }
 
+    private fun PartialCall.toToolCall(index: Int): ToolCall = ToolCall(
+        id = id.ifBlank { "call_$index" },
+        name = name,
+        arguments = parseArgs(args.toString()),
+        thoughtSignature = signature,
+    )
+
     private fun parseArgs(raw: String?): JsonObject =
         runCatching { Json.parseToJsonElement(raw?.takeIf { it.isNotBlank() } ?: "{}").jsonObject }
             .getOrElse { buildJsonObject { put(ARGS_PARSE_ERROR_KEY, raw.orEmpty()) } }
+}
+
+/** Potongan pemanggilan tool yang sedang dirangkai dari stream. */
+private class PartialCall {
+    var id: String = ""
+    var name: String = ""
+    val args = StringBuilder()
+    var signature: String? = null
 }
