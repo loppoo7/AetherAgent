@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +32,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.aether.agent.presentation.viewmodel.EditorChatViewModel
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -75,7 +85,6 @@ private val CursorMargin = 24.dp
 @Composable
 fun FileEditorScreen(
     onBack: () -> Unit,
-    onAskAi: () -> Unit,
     viewModel: FileEditorViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -93,6 +102,8 @@ fun FileEditorScreen(
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     var viewportPx by remember { mutableIntStateOf(0) }
     var confirmDiscard by remember { mutableStateOf(false) }
+    var showChat by rememberSaveable { mutableStateOf(false) }
+    val chatVm: EditorChatViewModel = hiltViewModel()
 
     val vScroll = rememberScrollState()
     val hScroll = rememberScrollState()
@@ -158,7 +169,7 @@ fun FileEditorScreen(
 
     BackHandler(enabled = state.dirty) { confirmDiscard = true }
 
-    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -177,9 +188,8 @@ fun FileEditorScreen(
                     maxLines = 1,
                 )
             }
-            IconAction(AetherIcon.Sparkle, "Tanya AI", {
-                viewModel.askAi(field.text)
-                onAskAi()
+            IconAction(AetherIcon.Sparkle, if (showChat) "Tutup Chat AI" else "Tanya AI", {
+                showChat = !showChat
             }, tint = Terracotta)
             IconAction(AetherIcon.Search, "Cari di file", {
                 searchOpen = !searchOpen
@@ -234,7 +244,7 @@ fun FileEditorScreen(
                 val contentHeight = with(density) {
                     ((layout?.size?.height ?: 0) + EditorPadTop.toPx() * 2).toDp()
                 }
-                Row(Modifier.weight(1f).fillMaxWidth()) {
+                Row(Modifier.weight(if (showChat) 0.55f else 1f).fillMaxWidth()) {
                     // Kolom nomor baris: tidak ikut digeser ke samping, dan ikut bergerak naik-turun
                     // bersama editor karena memakai ScrollState vertikal yang sama.
                     Box(
@@ -293,6 +303,16 @@ fun FileEditorScreen(
                     }
                 }
             }
+        }
+
+        if (showChat) {
+            EditorChatPanel(
+                chatVm = chatVm,
+                fileName = viewModel.path.substringAfterLast('/'),
+                fileText = field.text,
+                onClose = { showChat = false },
+                modifier = Modifier.weight(0.45f),
+            )
         }
 
         state.notice?.let {
@@ -358,4 +378,133 @@ private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextField
 
     val updated = newText.substring(0, caret) + insert + newText.substring(caret)
     return TextFieldValue(updated, TextRange(caret + insert.length))
+}
+
+/** Panel chat di bawah editor. Riwayat dan konteksnya mengikuti file yang sedang dibuka. */
+@Composable
+private fun EditorChatPanel(
+    chatVm: EditorChatViewModel,
+    fileName: String,
+    fileText: String,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val palette = LocalAetherPalette.current
+    val messages by chatVm.messages.collectAsState()
+    val running by chatVm.running.collectAsState()
+    val activity by chatVm.activity.collectAsState()
+    val error by chatVm.error.collectAsState()
+    val approval by chatVm.approval.collectAsState()
+    var input by rememberSaveable { mutableStateOf("") }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+    }
+
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(palette.surface)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Chat AI", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                fileName,
+                style = MaterialTheme.typography.labelSmall,
+                color = palette.muted,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { chatVm.clear() }, enabled = !running) { Text("Hapus") }
+            IconAction(AetherIcon.Close, "Tutup chat", onClose, boxSize = 36.dp, iconSize = 18.dp)
+        }
+
+        if (messages.isEmpty()) {
+            Text(
+                "Tanyakan sesuatu tentang file ini. Konteksnya adalah isi editor saat ini.",
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.muted,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(messages, key = { it.id }) { m ->
+                    val mine = m.role == "user"
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(0.88f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (mine) palette.userBubble else palette.codeBg)
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                        ) {
+                            Text(m.content, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (running) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = Terracotta)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    activity ?: "Sedang berpikir…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = palette.muted,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { chatVm.stop() }) { Text("Stop") }
+            }
+        }
+        error?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
+
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                placeholder = { Text("Tanya tentang file ini…") },
+                maxLines = 4,
+                modifier = Modifier.weight(1f),
+            )
+            IconAction(
+                icon = AetherIcon.ArrowUp,
+                description = "Kirim",
+                onClick = {
+                    chatVm.send(input, fileText)
+                    input = ""
+                },
+                tint = Terracotta,
+                enabled = input.isNotBlank() && !running,
+            )
+        }
+    }
+
+    approval?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { chatVm.resolveApproval(false) },
+            title = { Text(pending.title) },
+            text = {
+                Box(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+                    Text(pending.diff, style = MaterialTheme.typography.bodySmall, fontFamily = AetherMono)
+                }
+            },
+            confirmButton = { Button(onClick = { chatVm.resolveApproval(true) }) { Text("Setujui") } },
+            dismissButton = { TextButton(onClick = { chatVm.resolveApproval(false) }) { Text("Tolak") } },
+        )
+    }
 }

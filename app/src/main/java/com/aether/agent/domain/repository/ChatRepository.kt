@@ -9,6 +9,7 @@ interface ChatRepository {
     fun observeMessages(sessionId: String): Flow<List<Message>>
     fun observeSessions(): Flow<List<ChatSession>>
     suspend fun createSession(title: String): String
+    suspend fun ensureSession(id: String, title: String)
     suspend fun renameSession(id: String, title: String)
     suspend fun deleteSession(id: String)
     suspend fun save(sessionId: String, role: String, content: String)

@@ -41,10 +41,7 @@ fun AppNavHost() {
             )
         }
         composable("editor/{server}/{path}") {
-            FileEditorScreen(
-                onBack = { nav.popBackStack() },
-                onAskAi = { nav.popBackStack("chat", false) },
-            )
+            FileEditorScreen(onBack = { nav.popBackStack() })
         }
     }
 }

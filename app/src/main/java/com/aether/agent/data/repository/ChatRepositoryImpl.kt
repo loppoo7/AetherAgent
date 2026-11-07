@@ -6,6 +6,7 @@ import com.aether.agent.data.local.db.MessageEntity
 import com.aether.agent.data.mapper.toDomain
 import com.aether.agent.domain.model.ChatSession
 import com.aether.agent.domain.model.DEFAULT_SESSION_TITLE
+import com.aether.agent.domain.model.EDITOR_SESSION_PREFIX
 import com.aether.agent.domain.model.LlmMessage
 import com.aether.agent.domain.model.Message
 import com.aether.agent.domain.repository.ChatRepository
@@ -22,12 +23,19 @@ class ChatRepositoryImpl @Inject constructor(private val dao: ChatDao) : ChatRep
         dao.observeMessages(sessionId).map { rows -> rows.map { it.toDomain() } }
 
     override fun observeSessions(): Flow<List<ChatSession>> =
-        dao.observeSessions().map { rows -> rows.map { ChatSession(it.id, it.title, it.updatedAt) } }
+        dao.observeSessions().map { rows ->
+            rows.filterNot { it.id.startsWith(EDITOR_SESSION_PREFIX) }
+                .map { ChatSession(it.id, it.title, it.updatedAt) }
+        }
 
     override suspend fun createSession(title: String): String {
         val id = UUID.randomUUID().toString()
         dao.upsertSession(ChatSessionEntity(id, title, System.currentTimeMillis()))
         return id
+    }
+
+    override suspend fun ensureSession(id: String, title: String) {
+        if (dao.getSession(id) == null) dao.upsertSession(ChatSessionEntity(id, title, System.currentTimeMillis()))
     }
 
     override suspend fun renameSession(id: String, title: String) = dao.renameSession(id, title)
