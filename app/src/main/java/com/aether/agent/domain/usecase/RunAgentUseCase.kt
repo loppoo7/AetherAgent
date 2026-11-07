@@ -1,5 +1,8 @@
 package com.aether.agent.domain.usecase
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.catch
+
 import com.aether.agent.domain.agent.AgentEvent
 import com.aether.agent.domain.agent.AgentRunner
 import com.aether.agent.domain.model.AttachedFileContext
@@ -26,7 +29,12 @@ class RunAgentUseCase @Inject constructor(
         chat.save(sessionId, "user", userText)
         val system = if (roleInstruction.isNullOrBlank()) cfg.systemPrompt
             else cfg.systemPrompt + "\n\nPERAN AI AKTIF — ikuti instruksi peran berikut:\n" + roleInstruction
-        runner.run(cfg, history, userText, system, context).collect { event ->
+        runner.run(cfg, history, userText, system, context)
+            .catch { e ->
+                if (e !is CancellationException) chat.save(sessionId, "assistant", "Gagal: ${e.message ?: "error"}")
+                throw e
+            }
+            .collect { event ->
             if (event is AgentEvent.Answer) chat.save(sessionId, "assistant", event.text)
             emit(event)
         }

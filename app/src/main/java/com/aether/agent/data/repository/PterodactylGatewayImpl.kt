@@ -100,7 +100,7 @@ class PterodactylGatewayImpl @Inject constructor(
             parameter("directory", dir.ifBlank { "/" })
         }.body()
         o["data"]?.jsonArray.orEmpty().map { e ->
-            val a = e.jsonObject["attributes"]!!.jsonObject
+            val a = (e.jsonObject["attributes"] ?: error("Respons daftar file tidak lengkap.")).jsonObject
             PteroFile(
                 name = a.text("name"),
                 isDir = a["is_file"]?.jsonPrimitive?.booleanOrNull == false,

@@ -1,5 +1,7 @@
 package com.aether.agent.data.api.llm
 
+import com.aether.agent.domain.model.ARGS_PARSE_ERROR_KEY
+
 import com.aether.agent.data.api.readableErrors
 import com.aether.agent.domain.model.AgentSettings
 import com.aether.agent.domain.model.ApiStyle
@@ -102,11 +104,13 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
         val text = msg["content"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val calls = msg["tool_calls"]?.jsonArray?.map { c ->
             val o = c.jsonObject
-            val fn = o["function"]!!.jsonObject
+            val fn = (o["function"] ?: error("Respons tool call tidak lengkap.")).jsonObject
             ToolCall(
-                id = o["id"]!!.jsonPrimitive.content,
-                name = fn["name"]!!.jsonPrimitive.content,
+                id = (o["id"] ?: error("ID tool call kosong.")).jsonPrimitive.content,
+                name = (fn["name"] ?: error("Nama tool kosong.")).jsonPrimitive.content,
                 arguments = parseArgs(fn["arguments"]?.jsonPrimitive?.contentOrNull),
+                thoughtSignature = o["extra_content"]?.jsonObject?.get("google")?.jsonObject
+                    ?.get("thought_signature")?.jsonPrimitive?.contentOrNull,
             )
         }.orEmpty()
         return LlmReply(text, calls)
@@ -149,8 +153,8 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
         val calls = blocks.filter { it.jsonObject["type"]?.jsonPrimitive?.content == "tool_use" }.map { b ->
             val o = b.jsonObject
             ToolCall(
-                id = o["id"]!!.jsonPrimitive.content,
-                name = o["name"]!!.jsonPrimitive.content,
+                id = (o["id"] ?: error("ID tool call kosong.")).jsonPrimitive.content,
+                name = (o["name"] ?: error("Nama tool_use kosong.")).jsonPrimitive.content,
                 arguments = o["input"]?.jsonObject ?: JsonObject(emptyMap()),
             )
         }
@@ -173,7 +177,12 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
                             put("type", "function")
                             putJsonObject("function") {
                                 put("name", c.name)
-                                put("arguments", c.arguments.toString())
+                                put("arguments", c.arguments[ARGS_PARSE_ERROR_KEY]?.jsonPrimitive?.content ?: c.arguments.toString())
+                            }
+                            c.thoughtSignature?.let { sig ->
+                                putJsonObject("extra_content") {
+                                    putJsonObject("google") { put("thought_signature", sig) }
+                                }
                             }
                         })
                     }
@@ -193,7 +202,7 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
         fun push(role: String, blocks: List<JsonObject>) {
             val last = out.lastOrNull()
             if (last != null && last["role"]?.jsonPrimitive?.content == role) {
-                val merged: List<JsonElement> = last["content"]!!.jsonArray + blocks
+                val merged: List<JsonElement> = last["content"]?.jsonArray.orEmpty() + blocks
                 out[out.lastIndex] = message(role, merged)
             } else {
                 out += message(role, blocks)
@@ -238,5 +247,5 @@ class LlmGatewayImpl @Inject constructor(private val http: HttpClient) : LlmGate
 
     private fun parseArgs(raw: String?): JsonObject =
         runCatching { Json.parseToJsonElement(raw?.takeIf { it.isNotBlank() } ?: "{}").jsonObject }
-            .getOrElse { JsonObject(emptyMap()) }
+            .getOrElse { buildJsonObject { put(ARGS_PARSE_ERROR_KEY, raw.orEmpty()) } }
 }

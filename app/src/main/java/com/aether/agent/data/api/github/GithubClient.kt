@@ -79,7 +79,8 @@ class GithubClient @Inject constructor(private val http: HttpClient) {
 
     suspend fun branchSha(c: GithubConfig, branch: String): String {
         val o: JsonObject = http.get("${repo(c)}/git/ref/heads/$branch") { github(c.token) }.body()
-        return o["object"]!!.jsonObject["sha"]!!.jsonPrimitive.content
+        return (o["object"] ?: error("Respons ref branch tidak lengkap.")).jsonObject["sha"]?.jsonPrimitive?.content
+            ?: error("SHA branch tidak ditemukan.")
     }
 
     suspend fun createBranch(c: GithubConfig, name: String, sha: String) {
@@ -111,7 +112,7 @@ class GithubClient @Inject constructor(private val http: HttpClient) {
         }.body<JsonArray>()
 
     suspend fun commits(c: GithubConfig, limit: Int): JsonArray =
-        http.get("${repo(c)}/commits?sha=${c.branch}&per_page=$limit") { github(c.token) }.body<JsonArray>()
+        http.get("${repo(c)}/commits?sha=${URLEncoder.encode(c.branch, "UTF-8")}&per_page=$limit") { github(c.token) }.body<JsonArray>()
 
     suspend fun issues(c: GithubConfig, limit: Int): JsonArray =
         http.get("${repo(c)}/issues?state=open&per_page=$limit") { github(c.token) }.body<JsonArray>()

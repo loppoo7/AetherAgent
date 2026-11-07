@@ -1,5 +1,10 @@
 package com.aether.agent.domain.agent_tools
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
+
 import com.aether.agent.domain.repository.PterodactylGateway
 import javax.inject.Inject
 import kotlinx.serialization.json.JsonObject
@@ -47,8 +52,16 @@ class PteroWriteFileTool @Inject constructor(private val ptero: PterodactylGatew
     )
     override fun describe(args: JsonObject) = "Menulis ${args.str("path")}"
     override suspend fun preview(args: JsonObject): String {
-        val old = runCatching { ptero.readFile(args.str("server"), args.str("path")) }.getOrDefault("")
-        return LineDiff.unified(old, args.str("content"))
+        val content = args.str("content")
+        val old = try {
+            ptero.readFile(args.str("server"), args.str("path"))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return "Peringatan: isi lama gagal dibaca (${e.message ?: "error"}). Jika file sudah ada, diff di bawah keliru.\n\n" +
+                LineDiff.unified("", content)
+        }
+        return LineDiff.unified(old, content)
     }
     override suspend fun execute(args: JsonObject): String {
         ptero.writeFile(args.str("server"), args.str("path"), args.str("content"))
@@ -65,19 +78,36 @@ class PteroDeleteTool @Inject constructor(private val ptero: PterodactylGateway)
         mapOf(
             "server" to SERVER_HINT,
             "directory" to "Folder tempat item berada, contoh: /plugins",
-            "names" to "Nama item dipisah koma, contoh: a.jar,b.jar",
+            "names" to "Nama item dipisah koma, contoh: a.jar,b.jar. Atau JSON array, contoh: [\"a,b.txt\",\"c.jar\"]",
         ),
         listOf("server", "directory", "names"),
     )
     override fun describe(args: JsonObject) = "Menghapus ${args.str("names")}"
-    override suspend fun preview(args: JsonObject): String =
-        "Hapus dari ${args.str("directory")}:\n" +
-            args.str("names").split(",").joinToString("\n") { "- ${it.trim()}" }
-    override suspend fun execute(args: JsonObject): String {
-        val names = args.str("names").split(",").map { it.trim() }.filter { it.isNotEmpty() }
-        ptero.deletePaths(args.str("server"), args.str("directory").ifBlank { "/" }, names)
-        return "Dihapus: ${names.joinToString()}"
+    override suspend fun preview(args: JsonObject): String {
+        val dir = args.str("directory").ifBlank { "/" }
+        val names = parseNames(args.str("names"))
+        if (names.isEmpty()) return "Tidak ada nama item yang diberikan. Tidak ada yang dihapus."
+        return "Hapus dari $dir:\n" + names.joinToString("\n") { "- $it" }
     }
+    override suspend fun execute(args: JsonObject): String {
+        val dir = args.str("directory").ifBlank { "/" }
+        val names = parseNames(args.str("names"))
+        if (names.isEmpty()) return "Tidak ada nama item yang diberikan. Tidak ada yang dihapus."
+        ptero.deletePaths(args.str("server"), dir, names)
+        return "Dihapus dari $dir: ${names.joinToString()}"
+    }
+}
+
+/** Nama item dari teks biasa (dipisah koma) atau JSON array. Dipakai oleh preview dan eksekusi agar sama. */
+private fun parseNames(raw: String): List<String> {
+    val text = raw.trim()
+    val items: List<String> = if (text.startsWith("[")) {
+        runCatching { Json.parseToJsonElement(text).jsonArray.map { it.jsonPrimitive.content } }
+            .getOrElse { text.split(",") }
+    } else {
+        text.split(",")
+    }
+    return items.map { it.trim() }.filter { it.isNotEmpty() }
 }
 
 class PteroPowerTool @Inject constructor(private val ptero: PterodactylGateway) : AgentTool {

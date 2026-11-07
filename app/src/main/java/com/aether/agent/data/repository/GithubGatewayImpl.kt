@@ -1,5 +1,8 @@
 package com.aether.agent.data.repository
 
+import kotlinx.coroutines.CancellationException
+import com.aether.agent.domain.agent_tools.LineDiff
+
 import android.util.Base64
 import com.aether.agent.data.api.github.GithubClient
 import com.aether.agent.data.api.github.GithubConfig
@@ -70,11 +73,16 @@ class GithubGatewayImpl @Inject constructor(
         out
     }
 
-    private suspend fun treeFiles(c: GithubConfig): List<String> =
-        client.tree(c)["tree"]?.jsonArray.orEmpty().mapNotNull { e ->
+    private suspend fun treeFiles(c: GithubConfig): List<String> {
+        val tree = client.tree(c)
+        val files = tree["tree"]?.jsonArray.orEmpty().mapNotNull { e ->
             val o = e.jsonObject
             if (o["type"]?.jsonPrimitive?.content == "blob") o["path"]?.jsonPrimitive?.content else null
         }
+        return if (tree["truncated"]?.jsonPrimitive?.booleanOrNull == true)
+            files + "(daftar tidak lengkap: repository terlalu besar, GitHub memotong hasilnya)"
+        else files
+    }
 
     override suspend fun listFiles(): List<String> = readableErrors {
         val s = currentSettings()
@@ -111,28 +119,83 @@ class GithubGatewayImpl @Inject constructor(
         val s = currentSettings()
         val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
         require(targets.isNotEmpty()) { "Pilih repository GitHub terlebih dahulu." }
-        val outcomes = mutableListOf<String>()
+        val done = mutableListOf<String>()
+        val failed = mutableListOf<String>()
         for (target in targets.sorted()) {
             val c = configForTarget(target)
-            val sha = client.file(c, path)?.get("sha")?.jsonPrimitive?.content
-            val result = client.putFile(c, path, content, message, sha)
-            outcomes += "${c.owner}/${c.repo}: " + result["content"]?.jsonObject?.get("html_url")?.jsonPrimitive?.content.orEmpty()
+            val label = "${c.owner}/${c.repo}"
+            try {
+                val sha = client.file(c, path)?.get("sha")?.jsonPrimitive?.content
+                val result = client.putFile(c, path, content, message, sha)
+                val url = result["content"]?.jsonObject?.get("html_url")?.jsonPrimitive?.content.orEmpty()
+                done += "$label: $url"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                failed += "$label: ${e.message ?: e::class.simpleName}"
+            }
         }
-        "Perubahan berhasil dikirim ke ${outcomes.size} repository:\n" + outcomes.joinToString("\n")
+        outcome("Perubahan berhasil dikirim ke", done, failed)
     }
 
     override suspend fun deleteFile(path: String, message: String): String = readableErrors {
         val s = currentSettings()
         val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
-        val outcomes = mutableListOf<String>()
+        require(targets.isNotEmpty()) { "Pilih repository GitHub terlebih dahulu." }
+        val done = mutableListOf<String>()
+        val failed = mutableListOf<String>()
         for (target in targets.sorted()) {
             val c = configForTarget(target)
-            val sha = client.file(c, path)?.get("sha")?.jsonPrimitive?.content
-                ?: error("File $path tidak ditemukan di ${c.owner}/${c.repo}.")
-            client.deleteFile(c, path, message, sha)
-            outcomes += "${c.owner}/${c.repo}: dihapus"
+            val label = "${c.owner}/${c.repo}"
+            try {
+                val sha = client.file(c, path)?.get("sha")?.jsonPrimitive?.content
+                    ?: error("File $path tidak ditemukan.")
+                client.deleteFile(c, path, message, sha)
+                done += label
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                failed += "$label: ${e.message ?: e::class.simpleName}"
+            }
         }
-        "Penghapusan berhasil di ${outcomes.size} repository:\n" + outcomes.joinToString("\n")
+        outcome("Penghapusan berhasil di", done, failed)
+    }
+
+    override suspend fun previewChange(path: String, newContent: String): String = readableErrors {
+        val s = currentSettings()
+        val targets = s.githubTargets.ifEmpty { setOf("${s.githubOwner}/${s.githubRepo}|${s.githubBranch}") }
+        val sections = mutableListOf<String>()
+        for (target in targets.sorted()) {
+            val c = configForTarget(target)
+            val label = "${c.owner}/${c.repo}"
+            var old = ""
+            var warning: String? = null
+            try {
+                old = decodeFile(client.file(c, path)).orEmpty()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                warning = e.message ?: "error"
+            }
+            sections += buildString {
+                append("=== $label · $path ===\n")
+                if (warning != null) {
+                    append("(peringatan: gagal membaca isi lama: $warning. Diff di bawah bisa menampilkan seluruh isi sebagai baru.)\n")
+                }
+                append(LineDiff.unified(old, newContent))
+            }
+        }
+        sections.joinToString("\n\n")
+    }
+
+    /** Ringkasan per repo. Kalau ada yang gagal, error menyebut mana yang sudah berubah dan mana yang gagal. */
+    private fun outcome(successPrefix: String, done: List<String>, failed: List<String>): String {
+        if (failed.isEmpty()) return "$successPrefix ${done.size} repository:\n" + done.joinToString("\n")
+        error(
+            "Operasi hanya sebagian. Sudah berubah: " +
+                (if (done.isEmpty()) "tidak ada" else done.joinToString("; ")) +
+                ". Gagal: " + failed.joinToString("; ")
+        )
     }
 
     override suspend fun createBranch(name: String, from: String): String = readableErrors {

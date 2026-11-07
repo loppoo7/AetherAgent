@@ -9,6 +9,8 @@ interface GithubGateway {
     suspend fun listFiles(repoTarget: String): List<String>
     suspend fun readFile(repoTarget: String, path: String): String?
     suspend fun readFileAcrossTargets(path: String): String
+    /** Diff per repo untuk perubahan yang akan ditulis, sama dengan yang benar-benar dikirim. */
+    suspend fun previewChange(path: String, newContent: String): String
     suspend fun writeFile(path: String, content: String, message: String): String
     suspend fun deleteFile(path: String, message: String): String
     suspend fun createBranch(name: String, from: String): String

@@ -1,5 +1,7 @@
 package com.aether.agent.domain.agent
 
+import com.aether.agent.domain.model.ARGS_PARSE_ERROR_KEY
+
 import com.aether.agent.domain.model.AgentMode
 import com.aether.agent.domain.agent_tools.ToolRegistry
 import com.aether.agent.domain.model.AgentSettings
@@ -41,6 +43,13 @@ class AgentRunner @Inject constructor(
             }
 
             for (call in reply.toolCalls) {
+                if (call.arguments.containsKey(ARGS_PARSE_ERROR_KEY)) {
+                    messages += LlmMessage.ToolResult(
+                        call.id, call.name,
+                        "Error: argumen tool bukan JSON yang valid. Panggil ulang tool dengan argumen JSON yang benar.",
+                    )
+                    continue
+                }
                 val tool = tools.get(call.name)
                 if (tool == null) {
                     messages += LlmMessage.ToolResult(call.id, call.name, "Tool tidak dikenal: ${call.name}")
