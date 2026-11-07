@@ -1,5 +1,7 @@
 package com.aether.agent.presentation.ui.files
 
+import com.aether.agent.presentation.components.ThinkingSteps
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
@@ -396,6 +398,7 @@ private fun EditorChatPanel(
     val messages by chatVm.messages.collectAsState()
     val running by chatVm.running.collectAsState()
     val activity by chatVm.activity.collectAsState()
+    val steps by chatVm.thinkingSteps.collectAsState()
     val error by chatVm.error.collectAsState()
     val approval by chatVm.approval.collectAsState()
     var input by rememberSaveable { mutableStateOf("") }
@@ -460,17 +463,7 @@ private fun EditorChatPanel(
         }
 
         if (running) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = Terracotta)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    activity ?: "Sedang berpikir…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = palette.muted,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = { chatVm.stop() }) { Text("Stop") }
-            }
+            ThinkingSteps(steps = steps, running = true, onStop = { chatVm.stop() })
         }
         error?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)

@@ -11,5 +11,6 @@ interface LlmGateway {
         system: String,
         messages: List<LlmMessage>,
         tools: List<ToolSpec>,
+        onStatus: suspend (String) -> Unit,
     ): LlmReply
 }

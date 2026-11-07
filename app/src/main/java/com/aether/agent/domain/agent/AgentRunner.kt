@@ -34,7 +34,7 @@ class AgentRunner @Inject constructor(
         val specs = tools.specs(settings.serverAgentMode)
 
         repeat(MAX_STEPS) {
-            val reply = llm.complete(settings, systemPrompt, messages, specs)
+            val reply = llm.complete(settings, systemPrompt, messages, specs) { emit(AgentEvent.Status(it)) }
             messages += LlmMessage.Assistant(reply.text, reply.toolCalls)
 
             if (reply.toolCalls.isEmpty()) {

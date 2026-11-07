@@ -64,6 +64,10 @@ class ChatViewModel @Inject constructor(
     val cards: StateFlow<List<AgentCard>> = _cards.asStateFlow()
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
+    private val _streamStatus = MutableStateFlow<String?>(null)
+    val streamStatus: StateFlow<String?> = _streamStatus.asStateFlow()
+    private val thinking = ThinkingTracker()
+    val thinkingSteps = thinking.steps
     private val _approval = MutableStateFlow<PendingApproval?>(null)
     val approval: StateFlow<PendingApproval?> = _approval.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)
@@ -113,6 +117,7 @@ class ChatViewModel @Inject constructor(
         _error.value = null
         _cards.value = emptyList()
         _attachedContext.value = emptyList()
+        thinking.reset()
         job = viewModelScope.launch {
             try {
                 runAgent(id, text.trim(), roleInstruction, contextSnapshot).collect { event -> onEvent(event) }
@@ -122,6 +127,8 @@ class ChatViewModel @Inject constructor(
                 _error.value = e.message ?: "Terjadi kesalahan."
             } finally {
                 _running.value = false
+                _streamStatus.value = null
+                thinking.finish()
                 _approval.value = null
             }
         }
@@ -129,9 +136,12 @@ class ChatViewModel @Inject constructor(
 
     private fun onEvent(event: AgentEvent) {
         when (event) {
-            is AgentEvent.ActionStarted ->
+            is AgentEvent.ActionStarted -> {
+                thinking.actionStarted(event.callId, event.title)
                 _cards.value = _cards.value + AgentCard(event.callId, event.title, CardState.RUNNING)
+            }
             is AgentEvent.ActionFinished -> {
+                thinking.actionFinished(event.callId, event.output)
                 val state = when (event.status) {
                     ActionStatus.OK -> CardState.OK
                     ActionStatus.FAILED -> CardState.FAILED
@@ -140,6 +150,10 @@ class ChatViewModel @Inject constructor(
                 _cards.value = _cards.value.map { if (it.id == event.callId) it.copy(state = state, output = event.output) else it }
             }
             is AgentEvent.Approval -> _approval.value = PendingApproval(event.title, event.diff, event.decision)
+            is AgentEvent.Status -> {
+                _streamStatus.value = event.text
+                thinking.status(event.text)
+            }
             is AgentEvent.Answer -> Unit
         }
     }

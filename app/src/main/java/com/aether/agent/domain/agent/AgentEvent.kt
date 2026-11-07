@@ -18,4 +18,6 @@ sealed interface AgentEvent {
         val decision: CompletableDeferred<Boolean>,
     ) : AgentEvent
     data class Answer(val text: String) : AgentEvent
+    /** Teks status singkat selama model berpikir atau menyiapkan tool. */
+    data class Status(val text: String) : AgentEvent
 }

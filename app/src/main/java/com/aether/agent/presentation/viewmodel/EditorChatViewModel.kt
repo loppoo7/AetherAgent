@@ -48,6 +48,8 @@ class EditorChatViewModel @Inject constructor(
     val approval: StateFlow<PendingApproval?> = _approval.asStateFlow()
 
     private var job: Job? = null
+    private val thinking = ThinkingTracker()
+    val thinkingSteps = thinking.steps
 
     /** [fileText] adalah isi editor saat ini, termasuk perubahan yang belum disimpan. */
     fun send(text: String, fileText: String) {
@@ -55,16 +57,27 @@ class EditorChatViewModel @Inject constructor(
         if (input.isEmpty() || _running.value) return
         _running.value = true
         _error.value = null
+        thinking.reset()
         job = viewModelScope.launch {
             try {
                 chat.ensureSession(sessionId, "Editor: " + path.substringAfterLast('/'))
                 val context = listOf(AttachedFileContext("editor", path, fileText))
                 runAgent(sessionId, input, null, context).collect { event ->
                     when (event) {
-                        is AgentEvent.ActionStarted -> _activity.value = event.title
-                        is AgentEvent.ActionFinished -> _activity.value = null
+                        is AgentEvent.ActionStarted -> {
+                            thinking.actionStarted(event.callId, event.title)
+                            _activity.value = event.title
+                        }
+                        is AgentEvent.ActionFinished -> {
+                            thinking.actionFinished(event.callId, event.output)
+                            _activity.value = null
+                        }
                         is AgentEvent.Approval ->
                             _approval.value = PendingApproval(event.title, event.diff, event.decision)
+                        is AgentEvent.Status -> {
+                            thinking.status(event.text)
+                            _activity.value = event.text
+                        }
                         is AgentEvent.Answer -> Unit
                     }
                 }
@@ -74,6 +87,7 @@ class EditorChatViewModel @Inject constructor(
                 _error.value = e.message ?: "Terjadi kesalahan."
             } finally {
                 _running.value = false
+                thinking.finish()
                 _activity.value = null
                 _approval.value = null
             }
